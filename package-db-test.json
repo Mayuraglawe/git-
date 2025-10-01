@@ -1,0 +1,12 @@
+{
+  "name": "test-database",
+  "version": "1.0.0",
+  "scripts": {
+    "test-db": "tsx server/setup-database.ts",
+    "verify-crud": "node -e \"console.log('Testing database operations...'); fetch('http://localhost:3000/api/database/test-connection').then(r=>r.json()).then(console.log).catch(console.error)\"",
+    "populate-sample": "node -e \"console.log('Populating sample data...'); fetch('http://localhost:3000/api/database/populate-sample', {method:'POST'}).then(r=>r.json()).then(console.log).catch(console.error)\""
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0"
+  }
+}
