@@ -100,11 +100,12 @@ export const getAllScheduledClasses: RequestHandler = async (req, res) => {
     }
 
     // Apply sorting
-    if (sort_by.includes('.')) {
-      const [table, field] = sort_by.split('.');
+    const sortByString = Array.isArray(sort_by) ? sort_by[0] : sort_by;
+    if (typeof sortByString === 'string' && sortByString.includes('.')) {
+      const [table, field] = sortByString.split('.');
       query = query.order(field, { foreignTable: table, ascending: sort_order === 'asc' });
     } else {
-      query = query.order(sort_by as string, { ascending: sort_order === 'asc' });
+      query = query.order(sortByString as string, { ascending: sort_order === 'asc' });
     }
 
     // Apply pagination

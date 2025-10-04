@@ -1,5 +1,7 @@
 import { RequestHandler } from "express";
 import { getSupabaseAdminClient } from "@shared/supabase";
+import { createEnhancedApiError, createPaginatedResponse } from "@shared/error-utils";
+import { ApiResponse, ApiError, PaginatedResponse } from "@shared/enhanced-api";
 
 const supabase = getSupabaseAdminClient();
 
@@ -48,7 +50,7 @@ export const testDatabaseConnection: RequestHandler = async (req, res) => {
         const { data, error } = await supabase
           .from(table)
           .select('count(*)')
-          .limit(1);
+          .limit(1) as { data: any; error: any };
         
         return {
           table,
@@ -65,8 +67,8 @@ export const testDatabaseConnection: RequestHandler = async (req, res) => {
       ...(result.status === 'fulfilled' ? result.value : { error: result.reason })
     }));
 
-    const failedTables = tableResults.filter(t => !t.accessible);
-    const successfulTables = tableResults.filter(t => t.accessible);
+    const failedTables = tableResults.filter((t: any) => !t.accessible);
+    const successfulTables = tableResults.filter((t: any) => t.accessible);
 
     console.log(`✅ ${successfulTables.length}/${tables.length} tables accessible`);
     if (failedTables.length > 0) {
@@ -121,9 +123,9 @@ export const verifyCRUDOperations: RequestHandler = async (req, res) => {
     // CREATE
     const { data: createdDept, error: createDeptError } = await supabase
       .from('departments')
-      .insert([deptTestData])
+      .insert([deptTestData] as any)
       .select()
-      .single();
+      .single() as { data: any; error: any };
 
     if (createDeptError) {
       testResults.push({
@@ -144,8 +146,8 @@ export const verifyCRUDOperations: RequestHandler = async (req, res) => {
       const { data: readDept, error: readDeptError } = await supabase
         .from('departments')
         .select('*')
-        .eq('id', createdDept?.id)
-        .single();
+        .eq('id', createdDept.id)
+        .single() as { data: any; error: any };
 
       testResults.push({
         table: 'departments',
@@ -155,13 +157,14 @@ export const verifyCRUDOperations: RequestHandler = async (req, res) => {
       });
 
       // UPDATE
-      const updateData = { description: 'Updated test description' };
+      const updateData: any = { description: 'Updated test description' };
       const { data: updatedDept, error: updateDeptError } = await supabase
         .from('departments')
+        // @ts-ignore - Supabase update type inference limitation
         .update(updateData)
-        .eq('id', createdDept?.id)
+        .eq('id', createdDept.id)
         .select()
-        .single();
+        .single() as { data: any; error: any };
 
       testResults.push({
         table: 'departments',
@@ -174,7 +177,7 @@ export const verifyCRUDOperations: RequestHandler = async (req, res) => {
       const { error: deleteDeptError } = await supabase
         .from('departments')
         .delete()
-        .eq('id', createdDept?.id);
+        .eq('id', createdDept.id);
 
       testResults.push({
         table: 'departments',
@@ -196,9 +199,9 @@ export const verifyCRUDOperations: RequestHandler = async (req, res) => {
 
     const { data: createdSlot, error: createSlotError } = await supabase
       .from('time_slots')
-      .insert([timeSlotTestData])
+      .insert([timeSlotTestData] as any)
       .select()
-      .single();
+      .single() as { data: any; error: any };
 
     if (createSlotError) {
       testResults.push({
@@ -216,7 +219,9 @@ export const verifyCRUDOperations: RequestHandler = async (req, res) => {
       });
 
       // Cleanup
-      await supabase.from('time_slots').delete().eq('id', createdSlot?.id);
+      if (createdSlot?.id) {
+        await supabase.from('time_slots').delete().eq('id', createdSlot.id);
+      }
     }
 
     const successfulOperations = testResults.filter(r => r.success).length;
@@ -265,7 +270,7 @@ export const getDatabaseStatus: RequestHandler = async (req, res) => {
       tables.map(async (table) => {
         const { count, error } = await supabase
           .from(table)
-          .select('*', { count: 'exact', head: true });
+          .select('*', { count: 'exact', head: true }) as { count: any; error: any };
         
         return {
           table,
@@ -360,8 +365,8 @@ export const populateSampleData: RequestHandler = async (req, res) => {
     // Insert departments
     const { data: departments, error: deptError } = await supabase
       .from('departments')
-      .upsert(sampleDepartments, { onConflict: 'code' })
-      .select();
+      .upsert(sampleDepartments as any, { onConflict: 'code' })
+      .select() as { data: any; error: any };
 
     results.push({
       operation: 'departments',
@@ -397,8 +402,8 @@ export const populateSampleData: RequestHandler = async (req, res) => {
 
       const { data: faculty, error: facultyError } = await supabase
         .from('faculty')
-        .upsert(sampleFaculty, { onConflict: 'employee_id' })
-        .select();
+        .upsert(sampleFaculty as any, { onConflict: 'employee_id' })
+        .select() as { data: any; error: any };
 
       results.push({
         operation: 'faculty',
@@ -437,8 +442,8 @@ export const populateSampleData: RequestHandler = async (req, res) => {
 
       const { data: subjects, error: subjectsError } = await supabase
         .from('subjects')
-        .upsert(sampleSubjects, { onConflict: 'code' })
-        .select();
+        .upsert(sampleSubjects as any, { onConflict: 'code' })
+        .select() as { data: any; error: any };
 
       results.push({
         operation: 'subjects',
@@ -473,8 +478,8 @@ export const populateSampleData: RequestHandler = async (req, res) => {
 
       const { data: classrooms, error: classroomsError } = await supabase
         .from('classrooms')
-        .upsert(sampleClassrooms, { onConflict: 'room_number' })
-        .select();
+        .upsert(sampleClassrooms as any, { onConflict: 'room_number' })
+        .select() as { data: any; error: any };
 
       results.push({
         operation: 'classrooms',
@@ -503,8 +508,8 @@ export const populateSampleData: RequestHandler = async (req, res) => {
 
       const { data: timeSlots, error: timeSlotsError } = await supabase
         .from('time_slots')
-        .upsert(sampleTimeSlots, { onConflict: 'slot_name' })
-        .select();
+        .upsert(sampleTimeSlots as any, { onConflict: 'slot_name' })
+        .select() as { data: any; error: any };
 
       results.push({
         operation: 'time_slots',

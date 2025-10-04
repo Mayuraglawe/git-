@@ -213,10 +213,10 @@ export function createServer() {
 
   // Assignment and Event routes (comprehensive CRUD)
   app.get("/api/faculty-assignments", assignmentsEventsRoutes.getAllFacultyAssignments);
-  app.post("/api/faculty-assignments", assignmentsEventsRoutes.createFacultyAssignment || assignmentsEventsRoutes.createAssignment);
-  app.delete("/api/faculty-assignments/:id", assignmentsEventsRoutes.deleteFacultyAssignment || assignmentsEventsRoutes.deleteAssignment);
-  app.get("/api/batch-assignments", assignmentsEventsRoutes.getAllBatchAssignments || assignmentsEventsRoutes.getAllFacultyAssignments);
-  app.post("/api/batch-assignments", assignmentsEventsRoutes.createBatchAssignment || assignmentsEventsRoutes.createAssignment);
+  app.post("/api/faculty-assignments", assignmentsEventsRoutes.createAssignment);
+  app.delete("/api/faculty-assignments/:id", assignmentsEventsRoutes.deleteAssignment);
+  app.get("/api/batch-assignments", assignmentsEventsRoutes.getAllFacultyAssignments);
+  app.post("/api/batch-assignments", assignmentsEventsRoutes.createAssignment);
   app.get("/api/events", assignmentsEventsRoutes.getAllEvents);
   app.post("/api/events", assignmentsEventsRoutes.createEvent);
   app.put("/api/events/:id", assignmentsEventsRoutes.updateEvent);

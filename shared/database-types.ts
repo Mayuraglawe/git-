@@ -617,11 +617,14 @@ export interface ApiError {
   error: string;
   message: string;
   status: number;
+  code?: string;
+  timestamp?: string;
   details?: any;
 }
 
 export interface PaginatedResponse<T> {
   data: T[];
+  success: boolean;
   pagination: {
     page: number;
     limit: number;
@@ -630,7 +633,93 @@ export interface PaginatedResponse<T> {
     hasNext: boolean;
     hasPrev: boolean;
   };
-  success: boolean;
+}
+
+// ============================================================================
+// MISSING ASSIGNMENT AND EVENT TYPES
+// ============================================================================
+
+// Generic assignment creation request (covers both faculty and batch assignments)
+export interface CreateAssignmentRequest {
+  subject_id: DatabaseID;
+  timetable_id?: DatabaseID;
+  assignment_type: 'faculty_subject' | 'batch_subject';
+  faculty_id?: DatabaseID;
+  batch_id?: DatabaseID;
+  effective_from?: string;
+  effective_to?: string;
+  priority?: number;
+  max_weekly_hours?: number;
+  notes?: string;
+}
+
+// Assignment with details for display
+export interface AssignmentWithDetails extends FacultySubjectAssignment {
+  subject_name?: string;
+  faculty_name?: string;
+  department_name?: string;
+}
+
+// Generic assignment update request
+export interface UpdateAssignmentRequest {
+  subject_id?: DatabaseID;
+  timetable_id?: DatabaseID;
+  assignment_type?: 'faculty_subject' | 'batch_subject';
+  faculty_id?: DatabaseID;
+  batch_id?: DatabaseID;
+  effective_from?: string;
+  effective_to?: string;
+  priority?: number;
+  max_weekly_hours?: number;
+  notes?: string;
+}
+
+// Event with details for display
+export interface EventWithDetails extends CollegeEvent {
+  department_name?: string;
+  created_by_name?: string;
+}
+
+// Event creation request
+export interface CreateEventRequest {
+  title: string;
+  description?: string;
+  event_type: string;
+  start_time: string;
+  end_time: string;
+  start_date: string;
+  end_date: string;
+  location?: string;
+  department_id?: DatabaseID;
+  is_recurring?: boolean;
+  recurrence_pattern?: string;
+  target_audience?: string;
+  max_participants?: number;
+  registration_required?: boolean;
+  contact_email?: string;
+  contact_phone?: string;
+  status?: string;
+}
+
+// Event update request
+export interface UpdateEventRequest {
+  title?: string;
+  description?: string;
+  event_type?: string;
+  start_time?: string;
+  end_time?: string;
+  start_date?: string;
+  end_date?: string;
+  location?: string;
+  department_id?: DatabaseID;
+  is_recurring?: boolean;
+  recurrence_pattern?: string;
+  target_audience?: string;
+  max_participants?: number;
+  registration_required?: boolean;
+  contact_email?: string;
+  contact_phone?: string;
+  status?: string;
 }
 
 // ============================================================================

@@ -1,0 +1,146 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Palette } from "./Palette";
+import { TimetableGrid } from "./TimetableGrid";
+import { assistantGreet, createEmptyGrid, detectConflicts, loadGrid, makeRowKey, saveGrid, type GridState } from "./helpers.ts";
+import { days, faculties, rooms, subjects, timeSlots } from "./data";
+import type { ChatMessage, DragPayload, GridCell, RowKey } from "./types";
+import { Chatbot } from "./Chatbot";
+
+export default function TimetableWorkspace({ semesters, scope }: { semesters: string[]; scope: string }) {
+  const [grid, setGrid] = useState<GridState>(() => loadGrid(scope) ?? createEmptyGrid(semesters));
+  const [messages, setMessages] = useState<ChatMessage[]>([assistantGreet()]);
+  const [activeSemesterFilter, setActiveSemesterFilter] = useState<string | "all">("all");
+
+  useEffect(() => {
+    saveGrid(grid, scope);
+  }, [grid, scope]);
+
+  const idxById = useMemo(() => ({
+    faculty: new Map(faculties.map((f) => [f.id, f.name])),
+    subject: new Map(subjects.map((s) => [s.id, s.name])),
+    room: new Map(rooms.map((r) => [r.id, r.name])),
+  }), []);
+
+  const appendAssistant = (content: string) =>
+    setMessages((m) => [...m, { id: crypto.randomUUID(), role: "assistant", content, ts: Date.now() }]);
+  const appendUser = (content: string) =>
+    setMessages((m) => [...m, { id: crypto.randomUUID(), role: "user", content, ts: Date.now() }]);
+
+  const onDropItem = (rk: RowKey, slotIndex: number, payload: DragPayload) => {
+    const key = makeRowKey(rk);
+    setGrid((prev) => {
+      const row = prev[key]?.slice() ?? [];
+      const cell: GridCell = { ...(row[slotIndex] ?? {}) };
+      if (cell.locked) return prev;
+      if (payload.type === "subject") {
+        cell.subjectId = payload.id;
+        const subj = subjects.find((s) => s.id === payload.id);
+        if (subj?.preferredFacultyId && !cell.facultyId) {
+          cell.facultyId = subj.preferredFacultyId;
+        }
+      } else if (payload.type === "faculty") {
+        cell.facultyId = payload.id;
+      } else if (payload.type === "room") {
+        cell.roomId = payload.id;
+      }
+      row[slotIndex] = cell;
+      const next = { ...prev, [key]: row } as GridState;
+      return next;
+    });
+
+    const named = (type: DragPayload["type"], id: string) => idxById[type].get(id) ?? id;
+    appendAssistant(
+      `Placed ${payload.type} "${named(payload.type as any, payload.id)}" on ${rk.day} ${timeSlots[slotIndex]} (${rk.semester}).`,
+    );
+  };
+
+  const onSend = (text: string) => {
+    appendUser(text);
+    const lower = text.toLowerCase();
+    if (lower.includes("conflict")) {
+      const conflicts = detectConflicts(grid, semesters);
+      if (conflicts.length === 0) {
+        appendAssistant("No faculty or room conflicts detected for the current timetable.");
+      } else {
+        const lines = conflicts.slice(0, 12).map((c) => {
+          const time = timeSlots[c.slotIndex];
+          const label = c.type === "faculty" ? idxById.faculty.get(c.id) ?? c.id : idxById.room.get(c.id) ?? c.id;
+          const rowsTxt = c.rows.map((r) => `${r.semester}`).join(", ");
+          return `${c.type === "faculty" ? "Faculty" : "Room"} "${label}" has a clash on ${c.day} ${time} across ${rowsTxt}.`;
+        });
+        appendAssistant(lines.join("\n"));
+      }
+      return;
+    }
+
+    if (lower.includes("suggest") || lower.includes("empty")) {
+      const subj = subjects.find((s) => lower.includes(s.name.toLowerCase()));
+      const fac = faculties.find((f) => lower.includes(f.name.toLowerCase()));
+      const target = subj?.name ?? fac?.name ?? null;
+
+      const empties: string[] = [];
+      for (const day of days) {
+        for (let i = 0; i < timeSlots.length; i++) {
+          if (i === 3) continue;
+          const rows = semesters
+            .map((semester) => ({ rk: { day, semester } as RowKey, cell: grid[makeRowKey({ day, semester })]?.[i] }))
+            .filter((x) => x.cell && !x.cell.subjectId && !x.cell.facultyId && !x.cell.roomId);
+          if (rows.length) {
+            const rs = rows.map((x) => x.rk.semester).join(", ");
+            empties.push(`${day} ${timeSlots[i]} (${rs})`);
+          }
+        }
+      }
+      if (empties.length === 0) {
+        appendAssistant("No empty slots found. You may need to clear some cells first.");
+        return;
+      }
+      const prefix = target ? `Here are open slots for ${target} (or anything):` : "Here are open slots:";
+      appendAssistant(prefix + "\n" + empties.slice(0, 12).join("\n"));
+      return;
+    }
+
+    appendAssistant("You can ask: check conflicts, or suggest empty slots for DBMS. I also log actions as you build.");
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-xl font-semibold">Timetable Builder</div>
+        <div className="flex items-center gap-2">
+          <Select value={activeSemesterFilter} onValueChange={(v) => setActiveSemesterFilter(v as any)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Filter by semester" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Semesters</SelectItem>
+              {semesters.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setGrid(createEmptyGrid(semesters));
+              appendAssistant("Cleared the timetable.");
+            }}
+          >
+            Clear All
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex gap-4">
+        <Palette />
+        <TimetableGrid grid={grid} onDropItem={onDropItem} semesterFilter={activeSemesterFilter} semesters={semesters} />
+      </div>
+
+      <Chatbot messages={messages} onSend={onSend} />
+    </div>
+  );
+}

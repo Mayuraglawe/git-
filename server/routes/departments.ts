@@ -8,7 +8,11 @@ import {
   FacultyWithDepartment,
   QueryOptions
 } from "@shared/database-types";
-import { supabase } from "@shared/supabase";
+import { getSupabaseAdminClient } from "../../shared/supabase";
+
+
+// Get supabase client instance
+const supabasePromise = getSupabaseAdminClient();
 
 /**
  * ============================================================================
@@ -23,6 +27,7 @@ import { supabase } from "@shared/supabase";
  */
 export const getDepartments: RequestHandler = async (req, res) => {
   try {
+    const supabase = await supabasePromise;
     const { 
       page = 1, 
       limit = 10, 
@@ -70,7 +75,7 @@ export const getDepartments: RequestHandler = async (req, res) => {
         message: 'Failed to fetch departments',
         status: 500,
         details: error
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     const response: PaginatedResponse<Department | DepartmentWithStats> = {
@@ -93,7 +98,7 @@ export const getDepartments: RequestHandler = async (req, res) => {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred',
       status: 500
-    } as ApiError);
+    } as ApiError as unknown as ApiError);
   }
 };
 
@@ -103,6 +108,7 @@ export const getDepartments: RequestHandler = async (req, res) => {
  */
 export const getDepartmentById: RequestHandler = async (req, res) => {
   try {
+    const supabase = await supabasePromise;
     const { id } = req.params;
     const { include_hod, include_stats, include_faculty } = req.query;
 
@@ -130,7 +136,7 @@ export const getDepartmentById: RequestHandler = async (req, res) => {
           error: 'Not Found',
           message: 'Department not found',
           status: 404
-        } as ApiError);
+        } as ApiError as unknown as ApiError);
       }
       
       console.error('Error fetching department:', error);
@@ -139,7 +145,7 @@ export const getDepartmentById: RequestHandler = async (req, res) => {
         message: 'Failed to fetch department',
         status: 500,
         details: error
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     const response: ApiResponse<Department | DepartmentWithStats> = {
@@ -155,7 +161,7 @@ export const getDepartmentById: RequestHandler = async (req, res) => {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred',
       status: 500
-    } as ApiError);
+    } as ApiError as unknown as ApiError);
   }
 };
 
@@ -173,7 +179,7 @@ export const createDepartment: RequestHandler = async (req, res) => {
         error: 'Validation Error',
         message: 'Department name and code are required',
         status: 400
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     // Check for duplicate code
@@ -188,7 +194,7 @@ export const createDepartment: RequestHandler = async (req, res) => {
         error: 'Conflict',
         message: 'Department code already exists',
         status: 409
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     // Validate HOD if provided
@@ -205,7 +211,7 @@ export const createDepartment: RequestHandler = async (req, res) => {
           error: 'Validation Error',
           message: 'Invalid Head of Department ID',
           status: 400
-        } as ApiError);
+        } as ApiError as unknown as ApiError);
       }
     }
 
@@ -225,7 +231,7 @@ export const createDepartment: RequestHandler = async (req, res) => {
         message: 'Failed to create department',
         status: 500,
         details: error
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     const response: ApiResponse<Department> = {
@@ -241,7 +247,7 @@ export const createDepartment: RequestHandler = async (req, res) => {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred',
       status: 500
-    } as ApiError);
+    } as ApiError as unknown as ApiError);
   }
 };
 
@@ -251,6 +257,7 @@ export const createDepartment: RequestHandler = async (req, res) => {
  */
 export const updateDepartment: RequestHandler = async (req, res) => {
   try {
+    const supabase = await supabasePromise;
     const { id } = req.params;
     const updateData: UpdateDepartmentRequest = req.body;
 
@@ -266,7 +273,7 @@ export const updateDepartment: RequestHandler = async (req, res) => {
         error: 'Not Found',
         message: 'Department not found',
         status: 404
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     // Check for duplicate code if code is being updated
@@ -283,7 +290,7 @@ export const updateDepartment: RequestHandler = async (req, res) => {
           error: 'Conflict',
           message: 'Department code already exists',
           status: 409
-        } as ApiError);
+        } as ApiError as unknown as ApiError);
       }
     }
 
@@ -301,7 +308,7 @@ export const updateDepartment: RequestHandler = async (req, res) => {
           error: 'Validation Error',
           message: 'Invalid Head of Department ID',
           status: 400
-        } as ApiError);
+        } as ApiError as unknown as ApiError);
       }
     }
 
@@ -322,7 +329,7 @@ export const updateDepartment: RequestHandler = async (req, res) => {
         message: 'Failed to update department',
         status: 500,
         details: error
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     const response: ApiResponse<Department> = {
@@ -338,7 +345,7 @@ export const updateDepartment: RequestHandler = async (req, res) => {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred',
       status: 500
-    } as ApiError);
+    } as ApiError as unknown as ApiError);
   }
 };
 
@@ -348,6 +355,7 @@ export const updateDepartment: RequestHandler = async (req, res) => {
  */
 export const deleteDepartment: RequestHandler = async (req, res) => {
   try {
+    const supabase = await supabasePromise;
     const { id } = req.params;
     const { hard_delete } = req.query;
 
@@ -363,7 +371,7 @@ export const deleteDepartment: RequestHandler = async (req, res) => {
         error: 'Not Found',
         message: 'Department not found',
         status: 404
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     // Check for dependencies before deletion
@@ -396,7 +404,7 @@ export const deleteDepartment: RequestHandler = async (req, res) => {
             subject_count: subjectCount?.length || 0,
             batch_count: batchCount?.length || 0
           }
-        } as ApiError);
+        } as ApiError as unknown as ApiError);
       }
 
       const { error } = await supabase
@@ -411,7 +419,7 @@ export const deleteDepartment: RequestHandler = async (req, res) => {
           message: 'Failed to delete department',
           status: 500,
           details: error
-        } as ApiError);
+        } as ApiError as unknown as ApiError);
       }
     } else {
       // Soft delete
@@ -432,7 +440,7 @@ export const deleteDepartment: RequestHandler = async (req, res) => {
           message: 'Failed to deactivate department',
           status: 500,
           details: error
-        } as ApiError);
+        } as ApiError as unknown as ApiError);
       }
     }
 
@@ -449,7 +457,7 @@ export const deleteDepartment: RequestHandler = async (req, res) => {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred',
       status: 500
-    } as ApiError);
+    } as ApiError as unknown as ApiError);
   }
 };
 
@@ -465,6 +473,7 @@ export const deleteDepartment: RequestHandler = async (req, res) => {
  */
 export const assignHOD: RequestHandler = async (req, res) => {
   try {
+    const supabase = await supabasePromise;
     const { id } = req.params;
     const { faculty_id } = req.body;
 
@@ -473,7 +482,7 @@ export const assignHOD: RequestHandler = async (req, res) => {
         error: 'Validation Error',
         message: 'Faculty ID is required',
         status: 400
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     // Validate faculty exists and is active
@@ -489,7 +498,7 @@ export const assignHOD: RequestHandler = async (req, res) => {
         error: 'Validation Error',
         message: 'Invalid or inactive faculty member',
         status: 400
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     // Check if faculty belongs to the department
@@ -498,7 +507,7 @@ export const assignHOD: RequestHandler = async (req, res) => {
         error: 'Validation Error',
         message: 'Faculty member must belong to the department',
         status: 400
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     const { data, error } = await supabase
@@ -521,7 +530,7 @@ export const assignHOD: RequestHandler = async (req, res) => {
         message: 'Failed to assign Head of Department',
         status: 500,
         details: error
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     const response: ApiResponse<Department> = {
@@ -537,7 +546,7 @@ export const assignHOD: RequestHandler = async (req, res) => {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred',
       status: 500
-    } as ApiError);
+    } as ApiError as unknown as ApiError);
   }
 };
 
@@ -547,6 +556,7 @@ export const assignHOD: RequestHandler = async (req, res) => {
  */
 export const getDepartmentFaculty: RequestHandler = async (req, res) => {
   try {
+    const supabase = await supabasePromise;
     const { id } = req.params;
     const { active_only = 'true' } = req.query;
 
@@ -570,7 +580,7 @@ export const getDepartmentFaculty: RequestHandler = async (req, res) => {
         message: 'Failed to fetch department faculty',
         status: 500,
         details: error
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     const response: ApiResponse<FacultyWithDepartment[]> = {
@@ -586,7 +596,7 @@ export const getDepartmentFaculty: RequestHandler = async (req, res) => {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred',
       status: 500
-    } as ApiError);
+    } as ApiError as unknown as ApiError);
   }
 };
 
@@ -596,6 +606,7 @@ export const getDepartmentFaculty: RequestHandler = async (req, res) => {
  */
 export const getDepartmentStatistics: RequestHandler = async (req, res) => {
   try {
+    const supabase = await supabasePromise;
     const { id } = req.params;
     const { academic_year, semester } = req.query;
 
@@ -611,7 +622,7 @@ export const getDepartmentStatistics: RequestHandler = async (req, res) => {
         error: 'Not Found',
         message: 'Department not found',
         status: 404
-      } as ApiError);
+      } as ApiError as unknown as ApiError);
     }
 
     // Get various statistics
@@ -649,6 +660,7 @@ export const getDepartmentStatistics: RequestHandler = async (req, res) => {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred',
       status: 500
-    } as ApiError);
+    } as ApiError as unknown as ApiError);
   }
 };
+

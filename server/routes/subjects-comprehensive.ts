@@ -1,5 +1,6 @@
 import { RequestHandler } from "express";
 import { ApiResponse, ApiError, PaginatedResponse } from "@shared/enhanced-api";
+import { createEnhancedApiError, createPaginatedResponse } from "@shared/error-utils";
 import { 
   Subject, 
   CreateSubjectRequest, 
@@ -9,10 +10,15 @@ import {
   BatchSubjectAssignment,
   QueryOptions
 } from "@shared/database-types";
-import { supabase } from "@shared/supabase";
+import { getSupabaseAdminClient } from "@shared/supabase";
+
+const supabase = getSupabaseAdminClient() as any;
 
 /**
- * ============================================================================
+ * ===================================================          } catch (error) {
+            console.error('Error fetching prerequisite subjects:', error);
+            return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch prerequisite subjects', error));
+          }================
  * SUBJECT CRUD OPERATIONS
  * Complete subject management with department linking and prerequisite handling
  * ============================================================================
@@ -92,35 +98,20 @@ export const getAllSubjects: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching subjects:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch subjects',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch subjects', error));
     }
 
-    const response: PaginatedResponse<Subject | SubjectWithDepartment> = {
-      data: data || [],
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / Number(limit)),
-        hasNext: to < (count || 0) - 1,
-        hasPrev: Number(page) > 1
-      },
-      success: true
-    };
+    const response = createPaginatedResponse(
+      data || [],
+      count || 0,
+      Number(page),
+      Number(limit)
+    );
 
     res.json(response);
   } catch (error) {
     console.error('Error in getAllSubjects:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -158,20 +149,11 @@ export const getSubjectById: RequestHandler = async (req, res) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Subject not found',
-          status: 404
-        } as ApiError);
+        return res.status(404).json(createEnhancedApiError('NOT_FOUND', 'Subject not found'));
       }
       
       console.error('Error fetching subject:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch subject',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch subject', error));
     }
 
     // Parse prerequisites if requested
@@ -200,11 +182,7 @@ export const getSubjectById: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getSubjectById:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -218,11 +196,7 @@ export const createSubject: RequestHandler = async (req, res) => {
 
     // Validation
     if (!subjectData.name || !subjectData.code || !subjectData.department_id) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Subject name, code, and department ID are required',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Subject name, code, and department ID are required'));
     }
 
     // Check for duplicate code within department
@@ -234,11 +208,7 @@ export const createSubject: RequestHandler = async (req, res) => {
       .single();
 
     if (existingSubject) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Subject code already exists in this department',
-        status: 409
-      } as ApiError);
+      return res.status(409).json(createEnhancedApiError('CONFLICT', 'Subject code already exists in this department'));
     }
 
     // Validate department exists
@@ -250,11 +220,7 @@ export const createSubject: RequestHandler = async (req, res) => {
       .single();
 
     if (!deptExists) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Invalid Department ID',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Invalid Department ID'));
     }
 
     // Validate prerequisites if provided
@@ -268,29 +234,17 @@ export const createSubject: RequestHandler = async (req, res) => {
             .in('id', prerequisiteIds);
 
           if (count !== prerequisiteIds.length) {
-            return res.status(400).json({
-              error: 'Validation Error',
-              message: 'One or more prerequisite subjects not found',
-              status: 400
-            } as ApiError);
+            return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'One or more prerequisite subjects not found'));
           }
         }
       } catch (e) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Prerequisites must be a valid JSON array of subject IDs',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Prerequisites must be a valid JSON array of subject IDs'));
       }
     }
 
     // Validate credits and hours
     if (subjectData.credits && subjectData.credits < 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Credits must be non-negative',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Credits must be non-negative'));
     }
 
     const { data, error } = await supabase
@@ -310,12 +264,7 @@ export const createSubject: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error creating subject:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to create subject',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to create subject', error));
     }
 
     const response: ApiResponse<SubjectWithDepartment> = {
@@ -327,11 +276,7 @@ export const createSubject: RequestHandler = async (req, res) => {
     res.status(201).json(response);
   } catch (error) {
     console.error('Error in createSubject:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -352,11 +297,7 @@ export const updateSubject: RequestHandler = async (req, res) => {
       .single();
 
     if (!existingSubject) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Subject not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('NOT_FOUND', 'Subject not found'));
     }
 
     // Check for duplicate code if being updated
@@ -371,11 +312,7 @@ export const updateSubject: RequestHandler = async (req, res) => {
         .single();
 
       if (duplicateCheck) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Subject code already exists in this department',
-          status: 409
-        } as ApiError);
+        return res.status(409).json(createEnhancedApiError('CONFLICT', 'Subject code already exists in this department'));
       }
     }
 
@@ -389,11 +326,7 @@ export const updateSubject: RequestHandler = async (req, res) => {
         .single();
 
       if (!deptExists) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Invalid Department ID',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Invalid Department ID'));
       }
     }
 
@@ -408,19 +341,11 @@ export const updateSubject: RequestHandler = async (req, res) => {
             .in('id', prerequisiteIds);
 
           if (count !== prerequisiteIds.length) {
-            return res.status(400).json({
-              error: 'Validation Error',
-              message: 'One or more prerequisite subjects not found',
-              status: 400
-            } as ApiError);
+            return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'One or more prerequisite subjects not found'));
           }
         }
       } catch (e) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Prerequisites must be a valid JSON array of subject IDs',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Prerequisites must be a valid JSON array of subject IDs'));
       }
     }
 
@@ -439,12 +364,7 @@ export const updateSubject: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error updating subject:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to update subject',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to update subject', error));
     }
 
     const response: ApiResponse<SubjectWithDepartment> = {
@@ -456,11 +376,7 @@ export const updateSubject: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in updateSubject:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -480,11 +396,7 @@ export const deleteSubject: RequestHandler = async (req, res) => {
       .single();
 
     if (!existingSubject) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Subject not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('NOT_FOUND', 'Subject not found'));
     }
 
     // Check for dependencies
@@ -499,16 +411,15 @@ export const deleteSubject: RequestHandler = async (req, res) => {
     ]);
 
     if ((facultyAssignments || 0) > 0 || (batchAssignments || 0) > 0 || (scheduledClasses || 0) > 0) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Cannot delete subject with existing assignments or scheduled classes',
-        status: 409,
-        details: {
+      return res.status(409).json(createEnhancedApiError(
+        'CONFLICT',
+        'Cannot delete subject with existing assignments or scheduled classes',
+        {
           faculty_assignments: facultyAssignments || 0,
           batch_assignments: batchAssignments || 0,
           scheduled_classes: scheduledClasses || 0
         }
-      } as ApiError);
+      ));
     }
 
     const { error } = await supabase
@@ -518,12 +429,7 @@ export const deleteSubject: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error deleting subject:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to delete subject',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to delete subject', error));
     }
 
     const response: ApiResponse<null> = {
@@ -535,11 +441,7 @@ export const deleteSubject: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in deleteSubject:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -580,12 +482,7 @@ export const getSubjectFaculty: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching subject faculty:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch subject faculty',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch subject faculty', error));
     }
 
     const response: ApiResponse<FacultySubjectAssignment[]> = {
@@ -597,11 +494,7 @@ export const getSubjectFaculty: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getSubjectFaculty:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -636,12 +529,7 @@ export const getSubjectBatches: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching subject batches:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch subject batches',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch subject batches', error));
     }
 
     const response: ApiResponse<BatchSubjectAssignment[]> = {
@@ -653,11 +541,7 @@ export const getSubjectBatches: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getSubjectBatches:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -676,11 +560,7 @@ export const getSubjectPrerequisites: RequestHandler = async (req, res) => {
       .single();
 
     if (!subject) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Subject not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('NOT_FOUND', 'Subject not found'));
     }
 
     let prerequisites = [];
@@ -699,12 +579,7 @@ export const getSubjectPrerequisites: RequestHandler = async (req, res) => {
 
           if (error) {
             console.error('Error fetching prerequisite subjects:', error);
-            return res.status(500).json({
-              error: 'Database Error',
-              message: 'Failed to fetch prerequisite subjects',
-              status: 500,
-              details: error
-            } as ApiError);
+            return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch prerequisite subjects', error));
           }
 
           prerequisites = prerequisiteSubjects || [];
@@ -723,11 +598,7 @@ export const getSubjectPrerequisites: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getSubjectPrerequisites:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -769,12 +640,7 @@ export const getSubjectsByDepartment: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching subjects by department:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch subjects by department',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch subjects by department', error));
     }
 
     const response: ApiResponse<Subject[]> = {
@@ -786,10 +652,6 @@ export const getSubjectsByDepartment: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getSubjectsByDepartment:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };

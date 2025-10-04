@@ -232,7 +232,7 @@ export const SemesterTimetablePage: React.FC<SemesterTimetablePageProps> = ({
     { id: 3, name: "Database Management", code: "CE403", credits: 4, type: "Practical" },
   ];
 
-  const mockClasses = []; // Empty for now
+  const mockClasses: any[] = []; // Empty for now
 
   return (
     <div className="min-h-screen bg-background">
@@ -560,7 +560,7 @@ export const SemesterTimetablePage: React.FC<SemesterTimetablePageProps> = ({
                                     variant="ghost"
                                     size="sm"
                                     className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                    onClick={(e) => {
+                                    onClick={(e: React.MouseEvent) => {
                                       e.stopPropagation();
                                       handleRemoveAssignment(assignment.id);
                                     }}

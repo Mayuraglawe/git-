@@ -9,7 +9,8 @@ import {
   CreateFacultySubjectAssignmentRequest,
   QueryOptions
 } from "@shared/database-types";
-import { supabase } from "@shared/supabase";
+import { getSupabaseAdminClient } from "@shared/supabase";
+import { createEnhancedApiError, createPaginatedResponse } from "@shared/error-utils";
 
 /**
  * ============================================================================
@@ -38,12 +39,12 @@ export const getAllFaculty: RequestHandler = async (req, res) => {
       include_department
     } = req.query;
 
-    let query = supabase
-      .from('faculty')
+    const supabase = await getSupabaseAdminClient();
+    let query = supabase.from('faculty')
       .select(`
         *
         ${include_department === 'true' ? `,department:departments(*)` : ''}
-      `);
+      `, { count: 'exact' });
 
     // Apply filters
     if (search) {
@@ -82,35 +83,22 @@ export const getAllFaculty: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching faculty:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch faculty',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch faculty', error)
+      );
     }
 
-    const response: PaginatedResponse<Faculty | FacultyWithDepartment> = {
-      data: data || [],
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / Number(limit)),
-        hasNext: to < (count || 0) - 1,
-        hasPrev: Number(page) > 1
-      },
-      success: true
-    };
+    const response = createPaginatedResponse<Faculty | FacultyWithDepartment>(
+      data || [],
+      Number(page),
+      Number(limit),
+      count || 0
+    );
 
     res.json(response);
   } catch (error) {
     console.error('Error in getAllFaculty:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -123,6 +111,7 @@ export const getFacultyById: RequestHandler = async (req, res) => {
     const { id } = req.params;
     const { include_department, include_subjects, include_assignments, include_workload } = req.query;
 
+    const supabase = await getSupabaseAdminClient();
     let selectQuery = `
       *
       ${include_department === 'true' ? `,department:departments(*)` : ''}
@@ -144,24 +133,19 @@ export const getFacultyById: RequestHandler = async (req, res) => {
       .from('faculty')
       .select(selectQuery)
       .eq('id', id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Faculty member not found',
-          status: 404
-        } as ApiError);
+        return res.status(404).json(
+          createEnhancedApiError('NOT_FOUND', 'Faculty member not found')
+        );
       }
       
       console.error('Error fetching faculty:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch faculty member',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch faculty member', error)
+      );
     }
 
     const response: ApiResponse<Faculty | FacultyWithDepartment> = {
@@ -173,11 +157,7 @@ export const getFacultyById: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getFacultyById:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -191,43 +171,37 @@ export const createFacultyMember: RequestHandler = async (req, res) => {
 
     // Validation
     if (!facultyData.name || !facultyData.employee_id) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Faculty name and employee ID are required',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(
+        createEnhancedApiError('VALIDATION_ERROR', 'Faculty name and employee ID are required')
+      );
     }
 
+    const supabase = await getSupabaseAdminClient();
     // Check for duplicate employee ID
     const { data: existingFaculty, error: checkError } = await supabase
       .from('faculty')
       .select('id')
       .eq('employee_id', facultyData.employee_id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (existingFaculty) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Employee ID already exists',
-        status: 409
-      } as ApiError);
+      return res.status(409).json(
+        createEnhancedApiError('CONFLICT', 'Employee ID already exists')
+      );
     }
 
     // Validate department if provided
     if (facultyData.department_id) {
-      const { data: deptExists, error: deptError } = await supabase
-        .from('departments')
+      const { data: deptExists, error: deptError } = await supabase.from('departments')
         .select('id')
         .eq('id', facultyData.department_id)
         .eq('is_active', true)
-        .single();
+        .single() as { data: any; error: any };
 
       if (!deptExists) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Invalid Department ID',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(
+          createEnhancedApiError('VALIDATION_ERROR', 'Invalid Department ID')
+        );
       }
     }
 
@@ -235,22 +209,19 @@ export const createFacultyMember: RequestHandler = async (req, res) => {
     if (facultyData.email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(facultyData.email)) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Invalid email format',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(
+          createEnhancedApiError('VALIDATION_ERROR', 'Invalid email format')
+        );
       }
     }
 
-    const { data, error } = await supabase
-      .from('faculty')
+    const { data, error } = await supabase.from('faculty')
       .insert([{
         ...facultyData,
         experience_years: facultyData.experience_years || 0,
         max_weekly_hours: facultyData.max_weekly_hours || 20,
         is_active: true
-      }])
+      }] as any)
       .select(`
         *,
         department:departments(*)
@@ -259,12 +230,9 @@ export const createFacultyMember: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error creating faculty:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to create faculty member',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to create faculty member', error)
+      );
     }
 
     const response: ApiResponse<FacultyWithDepartment> = {
@@ -276,11 +244,7 @@ export const createFacultyMember: RequestHandler = async (req, res) => {
     res.status(201).json(response);
   } catch (error) {
     console.error('Error in createFacultyMember:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -293,54 +257,47 @@ export const updateFacultyMember: RequestHandler = async (req, res) => {
     const { id } = req.params;
     const updateData: UpdateFacultyRequest = req.body;
 
+    const supabase = await getSupabaseAdminClient();
     // Check if faculty exists
     const { data: existingFaculty, error: checkError } = await supabase
       .from('faculty')
       .select('id, employee_id')
       .eq('id', id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (!existingFaculty) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Faculty member not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(
+        createEnhancedApiError('NOT_FOUND', 'Faculty member not found')
+      );
     }
 
     // Check for duplicate employee ID if being updated
     if (updateData.employee_id && updateData.employee_id !== existingFaculty.employee_id) {
-      const { data: duplicateCheck } = await supabase
-        .from('faculty')
+      const { data: duplicateCheck } = await supabase.from('faculty')
         .select('id')
         .eq('employee_id', updateData.employee_id)
         .neq('id', id)
-        .single();
+        .single() as { data: any; error: any };
 
       if (duplicateCheck) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Employee ID already exists',
-          status: 409
-        } as ApiError);
+        return res.status(409).json(
+          createEnhancedApiError('CONFLICT', 'Employee ID already exists')
+        );
       }
     }
 
     // Validate department if provided
     if (updateData.department_id) {
-      const { data: deptExists } = await supabase
-        .from('departments')
+      const { data: deptExists } = await supabase.from('departments')
         .select('id')
         .eq('id', updateData.department_id)
         .eq('is_active', true)
-        .single();
+        .single() as { data: any; error: any };
 
       if (!deptExists) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Invalid Department ID',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(
+          createEnhancedApiError('VALIDATION_ERROR', 'Invalid Department ID')
+        );
       }
     }
 
@@ -348,20 +305,20 @@ export const updateFacultyMember: RequestHandler = async (req, res) => {
     if (updateData.email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(updateData.email)) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Invalid email format',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(
+          createEnhancedApiError('VALIDATION_ERROR', 'Invalid email format')
+        );
       }
     }
 
-    const { data, error } = await supabase
-      .from('faculty')
-      .update({
-        ...updateData,
-        updated_at: new Date().toISOString()
-      })
+    const updatePayload: any = {
+      ...updateData,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase.from('faculty')
+      // @ts-ignore - Supabase update type inference limitation
+      .update(updatePayload)
       .eq('id', id)
       .select(`
         *,
@@ -371,12 +328,9 @@ export const updateFacultyMember: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error updating faculty:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to update faculty member',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to update faculty member', error)
+      );
     }
 
     const response: ApiResponse<FacultyWithDepartment> = {
@@ -388,11 +342,7 @@ export const updateFacultyMember: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in updateFacultyMember:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -405,92 +355,77 @@ export const deleteFacultyMember: RequestHandler = async (req, res) => {
     const { id } = req.params;
     const { hard_delete } = req.query;
 
+    const supabase = await getSupabaseAdminClient();
     // Check if faculty exists
     const { data: existingFaculty, error: checkError } = await supabase
       .from('faculty')
       .select('id, name')
       .eq('id', id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (!existingFaculty) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Faculty member not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(
+        createEnhancedApiError('NOT_FOUND', 'Faculty member not found')
+      );
     }
 
     // Check if faculty is assigned as HOD
-    const { data: hodCheck } = await supabase
-      .from('departments')
+    const { data: hodCheck } = await supabase.from('departments')
       .select('id, name')
       .eq('head_of_department_id', id)
-      .eq('is_active', true);
+      .eq('is_active', true) as { data: any; error: any };
 
     if (hodCheck && hodCheck.length > 0) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Cannot delete faculty member who is Head of Department',
-        status: 409,
-        details: {
-          departments: hodCheck.map(dept => dept.name)
-        }
-      } as ApiError);
+      return res.status(409).json(
+        createEnhancedApiError('CONFLICT', 'Cannot delete faculty member who is Head of Department', {
+          departments: hodCheck.map((dept: any) => dept.name)
+        })
+      );
     }
 
     // Check for active class assignments
-    const { data: activeClasses } = await supabase
-      .from('scheduled_classes')
-      .select('id', { count: 'exact' })
-      .eq('faculty_id', id);
-
+    const { data: activeClasses } = await supabase.from('scheduled_classes')
+      .select('id', { count: 'exact' }) as { data: any; error: any };
+      
     if (hard_delete === 'true') {
       // Hard delete - only if no dependencies
       if (activeClasses && activeClasses.length > 0) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Cannot delete faculty member with active class assignments',
-          status: 409,
-          details: {
+        return res.status(409).json(
+          createEnhancedApiError('CONFLICT', 'Cannot delete faculty member with active class assignments', {
             active_classes: activeClasses.length
-          }
-        } as ApiError);
+          })
+        );
       }
 
-      const { error } = await supabase
-        .from('faculty')
+      const { error } = await supabase.from('faculty')
         .delete()
         .eq('id', id);
 
       if (error) {
         console.error('Error deleting faculty:', error);
-        return res.status(500).json({
-          error: 'Database Error',
-          message: 'Failed to delete faculty member',
-          status: 500,
-          details: error
-        } as ApiError);
+        return res.status(500).json(
+          createEnhancedApiError('DATABASE_ERROR', 'Failed to delete faculty member', error)
+        );
       }
     } else {
       // Soft delete
-      const { data, error } = await supabase
-        .from('faculty')
-        .update({
-          is_active: false,
-          updated_at: new Date().toISOString()
-        })
+      const softDeletePayload: any = {
+        is_active: false,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase.from('faculty')
+        // @ts-ignore - Supabase update type inference limitation
+        .update(softDeletePayload)
         .eq('id', id)
         .select()
         .single();
 
       if (error) {
         console.error('Error deactivating faculty:', error);
-        return res.status(500).json({
-          error: 'Database Error',
-          message: 'Failed to deactivate faculty member',
-          status: 500,
-          details: error
-        } as ApiError);
+        return res.status(500).json(
+          createEnhancedApiError('DATABASE_ERROR', 'Failed to deactivate faculty member', error)
+        );
       }
     }
 
@@ -503,11 +438,7 @@ export const deleteFacultyMember: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in deleteFacultyMember:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -526,8 +457,8 @@ export const getFacultySubjects: RequestHandler = async (req, res) => {
     const { id } = req.params;
     const { academic_year, active_only = 'true' } = req.query;
 
-    let query = supabase
-      .from('faculty_subject_assignments')
+    const supabase = await getSupabaseAdminClient();
+    let query = supabase.from('faculty_subject_assignments')
       .select(`
         *,
         subject:subjects(*),
@@ -549,12 +480,9 @@ export const getFacultySubjects: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching faculty subjects:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch faculty subject assignments',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch faculty subject assignments', error)
+      );
     }
 
     const response: ApiResponse<FacultySubjectAssignment[]> = {
@@ -566,11 +494,7 @@ export const getFacultySubjects: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getFacultySubjects:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -586,80 +510,67 @@ export const assignSubjectToFaculty: RequestHandler = async (req, res) => {
       faculty_id: Number(id)
     };
 
+    const supabase = await getSupabaseAdminClient();
     // Validate faculty exists
-    const { data: faculty, error: facultyError } = await supabase
-      .from('faculty')
+    const { data: faculty, error: facultyError } = await supabase.from('faculty')
       .select('id, name, max_weekly_hours')
       .eq('id', id)
       .eq('is_active', true)
-      .single();
+      .single() as { data: any; error: any };
 
     if (!faculty) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Faculty member not found or inactive',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(
+        createEnhancedApiError('NOT_FOUND', 'Faculty member not found or inactive')
+      );
     }
 
     // Validate subject exists
-    const { data: subject, error: subjectError } = await supabase
-      .from('subjects')
+    const { data: subject, error: subjectError } = await supabase.from('subjects')
       .select('id, name, lectures_per_week, labs_per_week')
       .eq('id', assignmentData.subject_id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (!subject) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Subject not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(
+        createEnhancedApiError('NOT_FOUND', 'Subject not found')
+      );
     }
 
     // Check for existing assignment
-    const { data: existingAssignment } = await supabase
-      .from('faculty_subject_assignments')
+    const { data: existingAssignment } = await supabase.from('faculty_subject_assignments')
       .select('id')
       .eq('faculty_id', id)
       .eq('subject_id', assignmentData.subject_id)
       .eq('academic_year', assignmentData.academic_year || new Date().getFullYear().toString())
       .eq('is_active', true)
-      .single();
+      .single() as { data: any; error: any };
 
     if (existingAssignment) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Faculty is already assigned to this subject for the academic year',
-        status: 409
-      } as ApiError);
+      return res.status(409).json(
+        createEnhancedApiError('CONFLICT', 'Faculty is already assigned to this subject for the academic year')
+      );
     }
 
     // Check workload constraints
-    const { data: currentAssignments } = await supabase
-      .from('faculty_subject_assignments')
+    const { data: currentAssignments } = await supabase.from('faculty_subject_assignments')
       .select('max_hours_per_week')
       .eq('faculty_id', id)
-      .eq('is_active', true);
+      .eq('is_active', true) as { data: any; error: any };
 
-    const currentWorkload = currentAssignments?.reduce((sum, assignment) => sum + assignment.max_hours_per_week, 0) || 0;
+    const currentWorkload = currentAssignments?.reduce((sum: number, assignment: any) => sum + assignment.max_hours_per_week, 0) || 0;
     const newWorkload = assignmentData.max_hours_per_week || (subject.lectures_per_week + subject.labs_per_week);
 
     if (currentWorkload + newWorkload > faculty.max_weekly_hours) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Assignment would exceed faculty maximum weekly hours',
-        status: 400,
-        details: {
+      return res.status(400).json(
+        createEnhancedApiError('VALIDATION_ERROR', 'Assignment would exceed faculty maximum weekly hours', {
           current_workload: currentWorkload,
           new_assignment_hours: newWorkload,
           max_weekly_hours: faculty.max_weekly_hours
-        }
-      } as ApiError);
+        })
+      );
     }
 
-    const { data, error } = await supabase
-      .from('faculty_subject_assignments')
+    const { data, error } = await supabase.from('faculty_subject_assignments')
       .insert([{
         ...assignmentData,
         proficiency_level: assignmentData.proficiency_level || 5,
@@ -667,7 +578,7 @@ export const assignSubjectToFaculty: RequestHandler = async (req, res) => {
         assignment_type: assignmentData.assignment_type || 'regular',
         is_primary_instructor: assignmentData.is_primary_instructor || true,
         is_active: true
-      }])
+      }] as any)
       .select(`
         *,
         subject:subjects(*),
@@ -677,12 +588,9 @@ export const assignSubjectToFaculty: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error creating faculty subject assignment:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to assign subject to faculty',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to assign subject to faculty', error)
+      );
     }
 
     const response: ApiResponse<FacultySubjectAssignment> = {
@@ -694,11 +602,7 @@ export const assignSubjectToFaculty: RequestHandler = async (req, res) => {
     res.status(201).json(response);
   } catch (error) {
     console.error('Error in assignSubjectToFaculty:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -711,24 +615,21 @@ export const getFacultyWorkload: RequestHandler = async (req, res) => {
     const { id } = req.params;
     const { academic_year, semester } = req.query;
 
+    const supabase = await getSupabaseAdminClient();
     // Get faculty info
-    const { data: faculty, error: facultyError } = await supabase
-      .from('faculty')
+    const { data: faculty, error: facultyError } = await supabase.from('faculty')
       .select('id, name, max_weekly_hours')
       .eq('id', id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (!faculty) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Faculty member not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(
+        createEnhancedApiError('NOT_FOUND', 'Faculty member not found')
+      );
     }
 
     // Get current assignments
-    let assignmentsQuery = supabase
-      .from('faculty_subject_assignments')
+    let assignmentsQuery = supabase.from('faculty_subject_assignments')
       .select(`
         *,
         subject:subjects(*)
@@ -740,11 +641,10 @@ export const getFacultyWorkload: RequestHandler = async (req, res) => {
       assignmentsQuery = assignmentsQuery.eq('academic_year', academic_year);
     }
 
-    const { data: assignments } = await assignmentsQuery;
+    const { data: assignments } = await assignmentsQuery as { data: any; error: any };
 
     // Get scheduled classes
-    let classesQuery = supabase
-      .from('scheduled_classes')
+    let classesQuery = supabase.from('scheduled_classes')
       .select(`
         *,
         time_slot:time_slots(*),
@@ -753,11 +653,11 @@ export const getFacultyWorkload: RequestHandler = async (req, res) => {
       `)
       .eq('faculty_id', id);
 
-    const { data: scheduledClasses } = await classesQuery;
+    const { data: scheduledClasses } = await classesQuery as { data: any; error: any };
 
     // Calculate workload statistics
-    const assignedHours = assignments?.reduce((sum, assignment) => sum + assignment.max_hours_per_week, 0) || 0;
-    const scheduledHours = scheduledClasses?.reduce((sum, cls) => {
+    const assignedHours = assignments?.reduce((sum: number, assignment: any) => sum + assignment.max_hours_per_week, 0) || 0;
+    const scheduledHours = scheduledClasses?.reduce((sum: number, cls: any) => {
       return sum + (cls.time_slot?.duration_minutes || 0) / 60;
     }, 0) || 0;
 
@@ -788,10 +688,15 @@ export const getFacultyWorkload: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getFacultyWorkload:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
+
+
+
+
+
+
+
+
+

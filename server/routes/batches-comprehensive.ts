@@ -10,7 +10,10 @@ import {
   Year,
   Semester
 } from "@shared/database-types";
-import { supabase } from "@shared/supabase";
+import { getSupabaseAdminClient } from "@shared/supabase";
+import { createEnhancedApiError, createPaginatedResponse } from "@shared/error-utils";
+
+const supabase = getSupabaseAdminClient() as any;
 
 /**
  * ============================================================================
@@ -98,35 +101,22 @@ export const getAllBatches: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching student batches:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch student batches',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch student batches', error)
+      );
     }
 
-    const response: PaginatedResponse<StudentBatch> = {
-      data: data || [],
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / Number(limit)),
-        hasNext: to < (count || 0) - 1,
-        hasPrev: Number(page) > 1
-      },
-      success: true
-    };
+    const response = createPaginatedResponse(
+      data || [],
+      Number(page),
+      Number(limit),
+      count || 0
+    );
 
     res.json(response);
   } catch (error) {
     console.error('Error in getAllBatches:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -159,20 +149,15 @@ export const getBatchById: RequestHandler = async (req, res) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Student batch not found',
-          status: 404
-        } as ApiError);
+        return res.status(404).json(
+          createEnhancedApiError('NOT_FOUND', 'Student batch not found')
+        );
       }
       
       console.error('Error fetching student batch:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch student batch',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch student batch', error)
+      );
     }
 
     // Include schedule if requested
@@ -202,11 +187,7 @@ export const getBatchById: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getBatchById:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -222,11 +203,9 @@ export const createBatch: RequestHandler = async (req, res) => {
     if (!batchData.name || !batchData.batch_code || !batchData.department_id || 
         !batchData.year || !batchData.semester || !batchData.strength || 
         !batchData.academic_year || !batchData.intake_year) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Name, batch code, department ID, year, semester, strength, academic year, and intake year are required',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(
+        createEnhancedApiError('VALIDATION_ERROR', 'Name, batch code, department ID, year, semester, strength, academic year, and intake year are required')
+      );
     }
 
     // Check for duplicate batch code
@@ -234,14 +213,12 @@ export const createBatch: RequestHandler = async (req, res) => {
       .from('student_batches')
       .select('id')
       .eq('batch_code', batchData.batch_code)
-      .single();
+      .single() as { data: any; error: any };
 
     if (existingBatch) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Batch code already exists',
-        status: 409
-      } as ApiError);
+      return res.status(409).json(
+        createEnhancedApiError('CONFLICT', 'Batch code already exists')
+      );
     }
 
     // Validate department exists
@@ -253,11 +230,9 @@ export const createBatch: RequestHandler = async (req, res) => {
       .single();
 
     if (!deptExists) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Invalid Department ID',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(
+        createEnhancedApiError('VALIDATION_ERROR', 'Invalid Department ID')
+      );
     }
 
     // Validate class coordinator if provided
@@ -270,38 +245,22 @@ export const createBatch: RequestHandler = async (req, res) => {
         .single();
 
       if (!coordinatorExists) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Invalid Class Coordinator ID',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(createEnhancedApiError('Validation Error', 'Invalid Class Coordinator ID'));
       }
     }
 
     // Validate year and semester ranges
     if (batchData.year < 1 || batchData.year > 4) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Year must be between 1 and 4',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('Validation Error', 'Year must be between 1 and 4'));
     }
 
     if (batchData.semester < 1 || batchData.semester > 8) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Semester must be between 1 and 8',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('Validation Error', 'Semester must be between 1 and 8'));
     }
 
     // Validate strength
     if (batchData.strength <= 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Batch strength must be greater than 0',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('Validation Error', 'Batch strength must be greater than 0'));
     }
 
     const { data, error } = await supabase
@@ -310,7 +269,7 @@ export const createBatch: RequestHandler = async (req, res) => {
         ...batchData,
         section: batchData.section || 'A',
         is_active: true
-      }])
+      }] as any)
       .select(`
         *,
         department:departments(*),
@@ -320,12 +279,9 @@ export const createBatch: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error creating student batch:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to create student batch',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to create student batch', error)
+      );
     }
 
     const response: ApiResponse<StudentBatch> = {
@@ -337,11 +293,7 @@ export const createBatch: RequestHandler = async (req, res) => {
     res.status(201).json(response);
   } catch (error) {
     console.error('Error in createBatch:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -359,14 +311,10 @@ export const updateBatch: RequestHandler = async (req, res) => {
       .from('student_batches')
       .select('id, batch_code')
       .eq('id', id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (!existingBatch) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Student batch not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('Not Found', 'Student batch not found'));
     }
 
     // Check for duplicate batch code if being updated
@@ -379,11 +327,7 @@ export const updateBatch: RequestHandler = async (req, res) => {
         .single();
 
       if (duplicateCheck) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Batch code already exists',
-          status: 409
-        } as ApiError);
+        return res.status(409).json(createEnhancedApiError('Conflict', 'Batch code already exists'));
       }
     }
 
@@ -397,11 +341,7 @@ export const updateBatch: RequestHandler = async (req, res) => {
         .single();
 
       if (!deptExists) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Invalid Department ID',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(createEnhancedApiError('Validation Error', 'Invalid Department ID'));
       }
     }
 
@@ -415,45 +355,30 @@ export const updateBatch: RequestHandler = async (req, res) => {
         .single();
 
       if (!coordinatorExists) {
-        return res.status(400).json({
-          error: 'Validation Error',
-          message: 'Invalid Class Coordinator ID',
-          status: 400
-        } as ApiError);
+        return res.status(400).json(createEnhancedApiError('Validation Error', 'Invalid Class Coordinator ID'));
       }
     }
 
     // Validate ranges if being updated
     if (updateData.year !== undefined && (updateData.year < 1 || updateData.year > 4)) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Year must be between 1 and 4',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('Validation Error', 'Year must be between 1 and 4'));
     }
 
     if (updateData.semester !== undefined && (updateData.semester < 1 || updateData.semester > 8)) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Semester must be between 1 and 8',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('Validation Error', 'Semester must be between 1 and 8'));
     }
 
     if (updateData.strength !== undefined && updateData.strength <= 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Batch strength must be greater than 0',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('Validation Error', 'Batch strength must be greater than 0'));
     }
 
+    // @ts-ignore - Supabase update type inference limitation
     const { data, error } = await supabase
       .from('student_batches')
       .update({
         ...updateData,
         updated_at: new Date().toISOString()
-      })
+      } as any)
       .eq('id', id)
       .select(`
         *,
@@ -464,12 +389,8 @@ export const updateBatch: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error updating student batch:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to update student batch',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('Database Error', 'Failed to update student batch', error
+      ));
     }
 
     const response: ApiResponse<StudentBatch> = {
@@ -481,11 +402,7 @@ export const updateBatch: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in updateBatch:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -506,11 +423,7 @@ export const deleteBatch: RequestHandler = async (req, res) => {
       .single();
 
     if (!existingBatch) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Student batch not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('Not Found', 'Student batch not found'));
     }
 
     // Check for dependencies
@@ -522,14 +435,11 @@ export const deleteBatch: RequestHandler = async (req, res) => {
     if (hard_delete === 'true') {
       // Hard delete - only if no dependencies
       if (scheduledClasses && scheduledClasses > 0) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Cannot delete batch with scheduled classes',
-          status: 409,
-          details: {
+        return res.status(409).json(
+          createEnhancedApiError('CONFLICT', 'Cannot delete batch with scheduled classes', {
             scheduled_classes: scheduledClasses
-          }
-        } as ApiError);
+          })
+        );
       }
 
       const { error } = await supabase
@@ -539,33 +449,26 @@ export const deleteBatch: RequestHandler = async (req, res) => {
 
       if (error) {
         console.error('Error deleting student batch:', error);
-        return res.status(500).json({
-          error: 'Database Error',
-          message: 'Failed to delete student batch',
-          status: 500,
-          details: error
-        } as ApiError);
+        return res.status(500).json(createEnhancedApiError('Database Error', 'Failed to delete student batch', error
+        ));
       }
     } else {
       // Soft delete
+      // @ts-ignore - Supabase update type inference limitation
       const { data, error } = await supabase
         .from('student_batches')
         .update({
           is_active: false,
           updated_at: new Date().toISOString()
-        })
+        } as any)
         .eq('id', id)
         .select()
         .single();
 
       if (error) {
         console.error('Error deactivating student batch:', error);
-        return res.status(500).json({
-          error: 'Database Error',
-          message: 'Failed to deactivate student batch',
-          status: 500,
-          details: error
-        } as ApiError);
+        return res.status(500).json(createEnhancedApiError('Database Error', 'Failed to deactivate student batch', error
+        ));
       }
     }
 
@@ -578,11 +481,7 @@ export const deleteBatch: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in deleteBatch:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('Internal Server Error', 'An unexpected error occurred'));
   }
 };
 
@@ -602,11 +501,9 @@ export const assignCoordinator: RequestHandler = async (req, res) => {
     const { faculty_id } = req.body;
 
     if (!faculty_id) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Faculty ID is required',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(
+        createEnhancedApiError('VALIDATION_ERROR', 'Faculty ID is required')
+      );
     }
 
     // Validate faculty exists and is active
@@ -618,11 +515,9 @@ export const assignCoordinator: RequestHandler = async (req, res) => {
       .single();
 
     if (!faculty) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Invalid or inactive faculty member',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(
+        createEnhancedApiError('VALIDATION_ERROR', 'Invalid or inactive faculty member')
+      );
     }
 
     // Get batch info to validate department match
@@ -633,19 +528,18 @@ export const assignCoordinator: RequestHandler = async (req, res) => {
       .single();
 
     if (faculty.department_id && batch && faculty.department_id !== batch.department_id) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Faculty member should belong to the same department as the batch',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(
+        createEnhancedApiError('VALIDATION_ERROR', 'Faculty member should belong to the same department as the batch')
+      );
     }
 
+    // @ts-ignore - Supabase update type inference limitation
     const { data, error } = await supabase
       .from('student_batches')
       .update({
         class_coordinator_id: faculty_id,
         updated_at: new Date().toISOString()
-      })
+      } as any)
       .eq('id', id)
       .select(`
         *,
@@ -655,12 +549,9 @@ export const assignCoordinator: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error assigning coordinator:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to assign class coordinator',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to assign class coordinator', error)
+      );
     }
 
     const response: ApiResponse<StudentBatch> = {
@@ -672,11 +563,7 @@ export const assignCoordinator: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in assignCoordinator:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('Internal Server Error', 'An unexpected error occurred'));
   }
 };
 
@@ -711,12 +598,9 @@ export const getBatchSubjects: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching batch subjects:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch batch subjects',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch batch subjects', error)
+      );
     }
 
     const response: ApiResponse<BatchSubjectAssignment[]> = {
@@ -728,11 +612,7 @@ export const getBatchSubjects: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getBatchSubjects:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('Internal Server Error', 'An unexpected error occurred'));
   }
 };
 
@@ -757,11 +637,7 @@ export const assignSubjectToBatch: RequestHandler = async (req, res) => {
       .single();
 
     if (!batch) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Student batch not found or inactive',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('Not Found', 'Student batch not found or inactive'));
     }
 
     // Validate subject exists
@@ -772,11 +648,7 @@ export const assignSubjectToBatch: RequestHandler = async (req, res) => {
       .single();
 
     if (!subject) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Subject not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('Not Found', 'Subject not found'));
     }
 
     // Check for existing assignment
@@ -789,20 +661,12 @@ export const assignSubjectToBatch: RequestHandler = async (req, res) => {
       .single();
 
     if (existingAssignment) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Subject is already assigned to this batch for the academic year',
-        status: 409
-      } as ApiError);
+      return res.status(409).json(createEnhancedApiError('Conflict', 'Subject is already assigned to this batch for the academic year'));
     }
 
     // Validate department match if subject has specific department
     if (subject.department_id && subject.department_id !== batch.department_id) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Subject does not belong to the batch department',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('Validation Error', 'Subject does not belong to the batch department'));
     }
 
     const { data, error } = await supabase
@@ -812,7 +676,7 @@ export const assignSubjectToBatch: RequestHandler = async (req, res) => {
         is_elective: assignmentData.is_elective || false,
         academic_year: assignmentData.academic_year || new Date().getFullYear().toString(),
         semester: assignmentData.semester || batch.semester
-      }])
+      }] as any)
       .select(`
         *,
         subject:subjects(*),
@@ -822,12 +686,8 @@ export const assignSubjectToBatch: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error creating batch subject assignment:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to assign subject to batch',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('Database Error', 'Failed to assign subject to batch', error
+      ));
     }
 
     const response: ApiResponse<BatchSubjectAssignment> = {
@@ -839,11 +699,7 @@ export const assignSubjectToBatch: RequestHandler = async (req, res) => {
     res.status(201).json(response);
   } catch (error) {
     console.error('Error in assignSubjectToBatch:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('Internal Server Error', 'An unexpected error occurred'));
   }
 };
 
@@ -861,14 +717,10 @@ export const promoteBatch: RequestHandler = async (req, res) => {
       .from('student_batches')
       .select('*')
       .eq('id', id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (!batch) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Student batch not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('Not Found', 'Student batch not found'));
     }
 
     // Calculate new semester and year
@@ -876,11 +728,7 @@ export const promoteBatch: RequestHandler = async (req, res) => {
     let newYear = batch.year;
 
     if (newSemester > 8) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Batch is already in final semester and cannot be promoted further',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('Validation Error', 'Batch is already in final semester and cannot be promoted further'));
     }
 
     // Update year if moving to odd semester
@@ -888,6 +736,7 @@ export const promoteBatch: RequestHandler = async (req, res) => {
       newYear = Math.ceil(newSemester / 2);
     }
 
+    // @ts-ignore - Supabase update type inference limitation
     const { data, error } = await supabase
       .from('student_batches')
       .update({
@@ -895,7 +744,7 @@ export const promoteBatch: RequestHandler = async (req, res) => {
         year: newYear,
         academic_year: new_academic_year || batch.academic_year,
         updated_at: new Date().toISOString()
-      })
+      } as any)
       .eq('id', id)
       .select(`
         *,
@@ -906,12 +755,8 @@ export const promoteBatch: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error promoting batch:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to promote batch',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('Database Error', 'Failed to promote batch', error
+      ));
     }
 
     const response: ApiResponse<StudentBatch> = {
@@ -923,10 +768,7 @@ export const promoteBatch: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in promoteBatch:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('Internal Server Error', 'An unexpected error occurred'));
   }
 };
+

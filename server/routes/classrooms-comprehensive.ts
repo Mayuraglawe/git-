@@ -1,5 +1,6 @@
 import { RequestHandler } from "express";
 import { ApiResponse, ApiError, PaginatedResponse } from "@shared/enhanced-api";
+import { createEnhancedApiError, createPaginatedResponse } from "@shared/error-utils";
 import { 
   Classroom, 
   CreateClassroomRequest, 
@@ -7,7 +8,9 @@ import {
   QueryOptions,
   ClassroomType
 } from "@shared/database-types";
-import { supabase } from "@shared/supabase";
+import { getSupabaseAdminClient } from "@shared/supabase";
+
+const supabase = getSupabaseAdminClient() as any;
 
 /**
  * ============================================================================
@@ -104,35 +107,22 @@ export const getAllClassrooms: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching classrooms:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch classrooms',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch classrooms', error)
+      );
     }
 
-    const response: PaginatedResponse<Classroom> = {
-      data: data || [],
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / Number(limit)),
-        hasNext: to < (count || 0) - 1,
-        hasPrev: Number(page) > 1
-      },
-      success: true
-    };
+    const response = createPaginatedResponse(
+      data || [],
+      Number(page),
+      Number(limit),
+      count || 0
+    );
 
     res.json(response);
   } catch (error) {
     console.error('Error in getAllClassrooms:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -164,20 +154,15 @@ export const getClassroomById: RequestHandler = async (req, res) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Classroom not found',
-          status: 404
-        } as ApiError);
+        return res.status(404).json(
+          createEnhancedApiError('NOT_FOUND', 'Classroom not found')
+        );
       }
       
       console.error('Error fetching classroom:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch classroom',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch classroom', error)
+      );
     }
 
     // Calculate usage statistics if requested
@@ -221,11 +206,7 @@ export const getClassroomById: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getClassroomById:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -239,11 +220,9 @@ export const createClassroom: RequestHandler = async (req, res) => {
 
     // Validation
     if (!classroomData.room_number || !classroomData.building || !classroomData.capacity) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Room number, building, and capacity are required',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(
+        createEnhancedApiError('VALIDATION_ERROR', 'Room number, building, and capacity are required')
+      );
     }
 
     // Check for duplicate room number in the same building
@@ -255,29 +234,19 @@ export const createClassroom: RequestHandler = async (req, res) => {
       .single();
 
     if (existingRoom) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Room number already exists in this building',
-        status: 409
-      } as ApiError);
+      return res.status(409).json(
+        createEnhancedApiError('CONFLICT', 'Room number already exists in this building')
+      );
     }
 
     // Validate capacity
     if (classroomData.capacity <= 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Capacity must be greater than 0',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Capacity must be greater than 0'));
     }
 
     // Validate floor number if provided
     if (classroomData.floor_number !== undefined && classroomData.floor_number < 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Floor number cannot be negative',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Floor number cannot be negative'));
     }
 
     const { data, error } = await supabase
@@ -296,12 +265,9 @@ export const createClassroom: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error creating classroom:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to create classroom',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to create classroom', error)
+      );
     }
 
     const response: ApiResponse<Classroom> = {
@@ -313,11 +279,7 @@ export const createClassroom: RequestHandler = async (req, res) => {
     res.status(201).json(response);
   } catch (error) {
     console.error('Error in createClassroom:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -338,11 +300,7 @@ export const updateClassroom: RequestHandler = async (req, res) => {
       .single();
 
     if (!existingRoom) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Classroom not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('NOT_FOUND', 'Classroom not found'));
     }
 
     // Check for duplicate room number if being updated
@@ -360,30 +318,20 @@ export const updateClassroom: RequestHandler = async (req, res) => {
         .single();
 
       if (duplicateCheck) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Room number already exists in this building',
-          status: 409
-        } as ApiError);
+        return res.status(409).json(
+          createEnhancedApiError('CONFLICT', 'Room number already exists in this building')
+        );
       }
     }
 
     // Validate capacity if being updated
     if (updateData.capacity !== undefined && updateData.capacity <= 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Capacity must be greater than 0',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Capacity must be greater than 0'));
     }
 
     // Validate floor number if being updated
     if (updateData.floor_number !== undefined && updateData.floor_number < 0) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'Floor number cannot be negative',
-        status: 400
-      } as ApiError);
+      return res.status(400).json(createEnhancedApiError('VALIDATION_ERROR', 'Floor number cannot be negative'));
     }
 
     const { data, error } = await supabase
@@ -398,12 +346,9 @@ export const updateClassroom: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error updating classroom:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to update classroom',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(
+        createEnhancedApiError('DATABASE_ERROR', 'Failed to update classroom', error)
+      );
     }
 
     const response: ApiResponse<Classroom> = {
@@ -415,11 +360,9 @@ export const updateClassroom: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in updateClassroom:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(
+      createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred')
+    );
   }
 };
 
@@ -440,11 +383,9 @@ export const deleteClassroom: RequestHandler = async (req, res) => {
       .single();
 
     if (!existingRoom) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Classroom not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(
+        createEnhancedApiError('NOT_FOUND', 'Classroom not found')
+      );
     }
 
     // Check for active scheduled classes
@@ -454,15 +395,10 @@ export const deleteClassroom: RequestHandler = async (req, res) => {
       .eq('classroom_id', id);
 
     if (count && count > 0 && force !== 'true') {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Cannot delete classroom with active scheduled classes',
-        status: 409,
-        details: {
-          active_classes: count,
-          suggestion: 'Use force=true to delete anyway, or deactivate the classroom instead'
-        }
-      } as ApiError);
+      return res.status(409).json(createEnhancedApiError('CONFLICT', 'Cannot delete classroom with active scheduled classes', {
+        active_classes: count,
+        suggestion: 'Use force=true to delete anyway, or deactivate the classroom instead'
+      }));
     }
 
     if (force === 'true' && count && count > 0) {
@@ -480,12 +416,7 @@ export const deleteClassroom: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error deleting classroom:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to delete classroom',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to delete classroom', error));
     }
 
     const response: ApiResponse<null> = {
@@ -497,11 +428,7 @@ export const deleteClassroom: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in deleteClassroom:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -527,11 +454,7 @@ export const toggleClassroomAvailability: RequestHandler = async (req, res) => {
       .single();
 
     if (!classroom) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Classroom not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('NOT_FOUND', 'Classroom not found'));
     }
 
     const newStatus = !classroom.is_available;
@@ -548,12 +471,7 @@ export const toggleClassroomAvailability: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error toggling classroom availability:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to toggle classroom availability',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to toggle classroom availability', error));
     }
 
     const response: ApiResponse<Classroom> = {
@@ -565,11 +483,7 @@ export const toggleClassroomAvailability: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in toggleClassroomAvailability:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -590,11 +504,7 @@ export const getClassroomSchedule: RequestHandler = async (req, res) => {
       .single();
 
     if (!classroom) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Classroom not found',
-        status: 404
-      } as ApiError);
+      return res.status(404).json(createEnhancedApiError('NOT_FOUND', 'Classroom not found'));
     }
 
     let query = supabase
@@ -624,12 +534,7 @@ export const getClassroomSchedule: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching classroom schedule:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch classroom schedule',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch classroom schedule', error));
     }
 
     const response: ApiResponse<{
@@ -649,11 +554,7 @@ export const getClassroomSchedule: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getClassroomSchedule:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -707,12 +608,7 @@ export const getAvailableClassrooms: RequestHandler = async (req, res) => {
 
     if (classroomError) {
       console.error('Error fetching classrooms:', classroomError);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch classrooms',
-        status: 500,
-        details: classroomError
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch classrooms', classroomError));
     }
 
     // If time constraints are provided, filter out busy classrooms
@@ -761,11 +657,7 @@ export const getAvailableClassrooms: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getAvailableClassrooms:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };
 
@@ -782,12 +674,7 @@ export const getBuildings: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error('Error fetching buildings:', error);
-      return res.status(500).json({
-        error: 'Database Error',
-        message: 'Failed to fetch buildings',
-        status: 500,
-        details: error
-      } as ApiError);
+      return res.status(500).json(createEnhancedApiError('DATABASE_ERROR', 'Failed to fetch buildings', error));
     }
 
     // Group and count by building
@@ -812,10 +699,6 @@ export const getBuildings: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error in getBuildings:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'An unexpected error occurred',
-      status: 500
-    } as ApiError);
+    res.status(500).json(createEnhancedApiError('INTERNAL_SERVER_ERROR', 'An unexpected error occurred', error));
   }
 };

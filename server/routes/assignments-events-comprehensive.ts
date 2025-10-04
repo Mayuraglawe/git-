@@ -7,10 +7,17 @@ import {
   UpdateCollegeEventRequest,
   BatchSubjectAssignment,
   CreateBatchSubjectAssignmentRequest,
+  CreateAssignmentRequest,
+  AssignmentWithDetails,
+  UpdateAssignmentRequest,
+  EventWithDetails,
+  CreateEventRequest,
+  UpdateEventRequest,
   ApiResponse,
   PaginatedResponse
 } from "@shared/database-types";
 import { getSupabaseAdminClient } from "@shared/supabase";
+import { createEnhancedApiError } from "@shared/error-utils";
 
 const supabase = getSupabaseAdminClient() as any;
 
@@ -514,12 +521,13 @@ export const getAllEvents: RequestHandler = async (req, res) => {
       query = query.lte('end_date', end_date);
     }
 
-    // Apply sorting
-    if (sort_by.includes('.')) {
-      const [table, field] = sort_by.split('.');
+    // Apply sorting with type safety
+    const sortByStr = typeof sort_by === 'string' ? sort_by : 'created_at';
+    if (sortByStr.includes('.')) {
+      const [table, field] = sortByStr.split('.');
       query = query.order(field, { foreignTable: table, ascending: sort_order === 'asc' });
     } else {
-      query = query.order(sort_by as string, { ascending: sort_order === 'asc' });
+      query = query.order(sortByStr, { ascending: sort_order === 'asc' });
     }
 
     // Apply pagination
