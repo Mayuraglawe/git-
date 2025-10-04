@@ -76,7 +76,12 @@ router.post("/exams", async (req, res) => {
           type: examData.type,
           subject: examData.subject,
           date: examData.date,
-          time: examData.time
+          time: examData.time,
+          duration: examData.duration,
+          instructions: examData.instructions,
+          topics: examData.topics,
+          creatorName: 'Creator', // In production, fetch actual creator name
+          departmentName: 'Department' // In production, fetch actual department name
         }
       );
     } catch (notificationError) {
@@ -157,7 +162,13 @@ router.post("/assignments", async (req, res) => {
         {
           title: assignmentData.title,
           subject: assignmentData.subject,
-          dueDate: assignmentData.due_date
+          dueDate: assignmentData.due_date,
+          dueTime: assignmentData.due_time,
+          description: assignmentData.description,
+          maxMarks: assignmentData.max_marks,
+          submissionFormat: assignmentData.submission_format,
+          creatorName: 'Creator', // In production, fetch actual creator name
+          departmentName: 'Department' // In production, fetch actual department name
         }
       );
     } catch (notificationError) {

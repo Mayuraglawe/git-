@@ -24,9 +24,34 @@ interface SendMessageResult {
   error?: string;
 }
 
+interface ExamNotificationPayload {
+  type: 'midterm' | 'endterm';
+  subject: string;
+  date: string;
+  time: string;
+  duration?: string;
+  instructions?: string;
+  topics?: string;
+  creatorName?: string;
+  departmentName?: string;
+}
+
+interface AssignmentNotificationPayload {
+  title: string;
+  subject: string;
+  dueDate: string;
+  dueTime?: string;
+  description?: string;
+  maxMarks?: string;
+  submissionFormat?: string;
+  creatorName?: string;
+  departmentName?: string;
+}
+
 /**
  * Telegram Service for handling publisher-to-principal communication
  * Allows publishers to send messages directly to the principal via Telegram bot
+ * Also handles exam and assignment notifications to students/publishers
  */
 export class TelegramService {
   private bot: TelegramBot | null = null;
@@ -270,6 +295,209 @@ ${payload.message}
   }
 
   /**
+   * Send exam notification to a Telegram chat
+   */
+  public async sendExamNotification(
+    chatId: string,
+    payload: ExamNotificationPayload
+  ): Promise<SendMessageResult> {
+    try {
+      if (!this.isInitialized || !this.bot) {
+        return {
+          success: false,
+          error: 'Telegram bot is not initialized'
+        };
+      }
+
+      const formattedMessage = this.formatExamNotification(payload);
+
+      const result = await this.bot.sendMessage(chatId, formattedMessage, {
+        parse_mode: 'HTML',
+        disable_notification: false
+      });
+
+      console.log(`✅ Exam notification sent to chat ${chatId}`);
+
+      return {
+        success: true,
+        messageId: result.message_id
+      };
+    } catch (error) {
+      console.error('❌ Failed to send exam notification:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
+   * Send assignment notification to a Telegram chat
+   */
+  public async sendAssignmentNotification(
+    chatId: string,
+    payload: AssignmentNotificationPayload
+  ): Promise<SendMessageResult> {
+    try {
+      if (!this.isInitialized || !this.bot) {
+        return {
+          success: false,
+          error: 'Telegram bot is not initialized'
+        };
+      }
+
+      const formattedMessage = this.formatAssignmentNotification(payload);
+
+      const result = await this.bot.sendMessage(chatId, formattedMessage, {
+        parse_mode: 'HTML',
+        disable_notification: false
+      });
+
+      console.log(`✅ Assignment notification sent to chat ${chatId}`);
+
+      return {
+        success: true,
+        messageId: result.message_id
+      };
+    } catch (error) {
+      console.error('❌ Failed to send assignment notification:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
+   * Broadcast exam notification to multiple chats
+   */
+  public async broadcastExamNotification(
+    chatIds: string[],
+    payload: ExamNotificationPayload
+  ): Promise<{ successful: number; failed: number }> {
+    let successful = 0;
+    let failed = 0;
+
+    for (const chatId of chatIds) {
+      const result = await this.sendExamNotification(chatId, payload);
+      if (result.success) {
+        successful++;
+      } else {
+        failed++;
+      }
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    console.log(`📊 Exam broadcast complete: ${successful} successful, ${failed} failed`);
+    return { successful, failed };
+  }
+
+  /**
+   * Broadcast assignment notification to multiple chats
+   */
+  public async broadcastAssignmentNotification(
+    chatIds: string[],
+    payload: AssignmentNotificationPayload
+  ): Promise<{ successful: number; failed: number }> {
+    let successful = 0;
+    let failed = 0;
+
+    for (const chatId of chatIds) {
+      const result = await this.sendAssignmentNotification(chatId, payload);
+      if (result.success) {
+        successful++;
+      } else {
+        failed++;
+      }
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    console.log(`📊 Assignment broadcast complete: ${successful} successful, ${failed} failed`);
+    return { successful, failed };
+  }
+
+  /**
+   * Format exam notification message
+   */
+  private formatExamNotification(payload: ExamNotificationPayload): string {
+    const examTypeIcon = payload.type === 'midterm' ? '📝' : '🎓';
+    const examTypeName = payload.type === 'midterm' ? 'Mid-term' : 'End-term';
+    
+    let message = `
+${examTypeIcon} <b>${examTypeName} Exam Scheduled</b>
+
+<b>Subject:</b> ${payload.subject}
+<b>Date:</b> ${payload.date}
+<b>Time:</b> ${payload.time}`;
+
+    if (payload.duration) {
+      message += `\n<b>Duration:</b> ${payload.duration}`;
+    }
+
+    if (payload.topics) {
+      message += `\n\n<b>Topics Covered:</b>\n${payload.topics}`;
+    }
+
+    if (payload.instructions) {
+      message += `\n\n<b>Instructions:</b>\n${payload.instructions}`;
+    }
+
+    if (payload.creatorName) {
+      message += `\n\n<b>Posted by:</b> ${payload.creatorName}`;
+    }
+
+    if (payload.departmentName) {
+      message += `\n<b>Department:</b> ${payload.departmentName}`;
+    }
+
+    message += `\n\n📱 <i>Notification from Py-Gram 2k25</i>`;
+
+    return message;
+  }
+
+  /**
+   * Format assignment notification message
+   */
+  private formatAssignmentNotification(payload: AssignmentNotificationPayload): string {
+    let message = `
+📚 <b>New Assignment Posted</b>
+
+<b>Title:</b> ${payload.title}
+<b>Subject:</b> ${payload.subject}
+<b>Due Date:</b> ${payload.dueDate}`;
+
+    if (payload.dueTime) {
+      message += `\n<b>Due Time:</b> ${payload.dueTime}`;
+    }
+
+    if (payload.maxMarks) {
+      message += `\n<b>Maximum Marks:</b> ${payload.maxMarks}`;
+    }
+
+    if (payload.submissionFormat) {
+      message += `\n<b>Submission Format:</b> ${payload.submissionFormat}`;
+    }
+
+    if (payload.description) {
+      message += `\n\n<b>Description:</b>\n${payload.description}`;
+    }
+
+    if (payload.creatorName) {
+      message += `\n\n<b>Posted by:</b> ${payload.creatorName}`;
+    }
+
+    if (payload.departmentName) {
+      message += `\n<b>Department:</b> ${payload.departmentName}`;
+    }
+
+    message += `\n\n📱 <i>Notification from Py-Gram 2k25</i>`;
+
+    return message;
+  }
+
+  /**
    * Check if the service is ready to send messages
    */
   public isReady(): boolean {
@@ -322,4 +550,10 @@ export async function initializeTelegramService(): Promise<boolean> {
 // EXPORT TYPES
 // ============================================================================
 
-export type { MessagePayload, SendMessageResult, TelegramConfig };
+export type { 
+  MessagePayload, 
+  SendMessageResult, 
+  TelegramConfig,
+  ExamNotificationPayload,
+  AssignmentNotificationPayload
+};
