@@ -112,12 +112,12 @@ class DatabaseSetup {
       // CREATE
       const { data: created, error: createError } = await supabase
         .from('departments')
-        .insert([testDepartment])
+        .insert([testDepartment] as any)
         .select()
-        .single();
+        .single() as any;
 
-      if (createError) {
-        this.logStep('CRUD: CREATE', false, `Create failed: ${createError.message}`);
+      if (createError || !created) {
+        this.logStep('CRUD: CREATE', false, `Create failed: ${createError?.message || 'No data returned'}`);
         allCRUDPassed = false;
       } else {
         this.logStep('CRUD: CREATE', true, 'Data successfully inserted');
@@ -137,14 +137,17 @@ class DatabaseSetup {
 
           // UPDATE
           const updateData = { description: 'Updated description for setup test' };
-          const { data: updated, error: updateError } = await supabase
+          const updateResult: any = await (supabase
             .from('departments')
+            // @ts-ignore - Supabase type inference issue
             .update(updateData)
             .eq('id', created.id)
             .select()
-            .single();
+            .single());
+          
+          const { data: updated, error: updateError } = updateResult;
 
-          if (updateError || updated?.description !== updateData.description) {
+          if (updateError || !updated || (updated as any).description !== updateData.description) {
             this.logStep('CRUD: UPDATE', false, `Update failed: ${updateError?.message || 'Data not updated'}`);
             allCRUDPassed = false;
           } else {
@@ -200,7 +203,7 @@ class DatabaseSetup {
             building: 'Engineering Block',
             floor_number: 3
           }
-        ], { onConflict: 'code' })
+        ] as any, { onConflict: 'code' })
         .select();
 
       if (deptError) {
@@ -218,7 +221,7 @@ class DatabaseSetup {
             {
               name: 'Dr. John Smith',
               employee_id: 'FAC001',
-              department_id: departments[0].id,
+              department_id: (departments as any)[0].id,
               email: 'john.smith@college.edu',
               designation: 'Professor',
               qualification: 'PhD in Computer Science',
@@ -228,14 +231,14 @@ class DatabaseSetup {
             {
               name: 'Dr. Jane Doe',
               employee_id: 'FAC002',
-              department_id: departments[1].id,
+              department_id: (departments as any)[1].id,
               email: 'jane.doe@college.edu',
               designation: 'Associate Professor',
               qualification: 'PhD in Information Technology',
               experience_years: 10,
               max_weekly_hours: 18
             }
-          ], { onConflict: 'employee_id' })
+          ] as any, { onConflict: 'employee_id' })
           .select();
 
         if (facultyError) {
@@ -251,7 +254,7 @@ class DatabaseSetup {
             {
               name: 'Data Structures and Algorithms',
               code: 'CS301',
-              department_id: departments[0].id,
+              department_id: (departments as any)[0].id,
               credits: 4,
               lectures_per_week: 3,
               labs_per_week: 1,
@@ -263,7 +266,7 @@ class DatabaseSetup {
             {
               name: 'Database Management Systems',
               code: 'IT301',
-              department_id: departments[1].id,
+              department_id: (departments as any)[1].id,
               credits: 4,
               lectures_per_week: 3,
               labs_per_week: 1,
@@ -272,7 +275,7 @@ class DatabaseSetup {
               year: 2,
               subject_type: 'core'
             }
-          ], { onConflict: 'code' })
+          ] as any, { onConflict: 'code' })
           .select();
 
         if (subjectsError) {
@@ -305,7 +308,7 @@ class DatabaseSetup {
               has_computer_lab: true,
               has_ac: true
             }
-          ], { onConflict: 'room_number' })
+          ] as any, { onConflict: 'room_number' })
           .select();
 
         if (classroomsError) {
@@ -339,7 +342,7 @@ class DatabaseSetup {
               slot_name: 'Tuesday Period 1',
               slot_type: 'regular'
             }
-          ], { onConflict: 'slot_name' })
+          ] as any, { onConflict: 'slot_name' })
           .select();
 
         if (timeSlotsError) {

@@ -1,5 +1,7 @@
 import { ScheduledClass, TimeSlot } from "@/store/api";
 import { cn } from "@/lib/utils";
+import HolidayService from "@/services/holiday-service";
+import { Calendar } from "lucide-react";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 const HOURS = Array.from({ length: 10 }, (_, i) => 8 + i); // 08:00-18:00
@@ -33,7 +35,7 @@ export function TimetableGrid({ classes, highlightConflicts, conflicts = [] }: T
           ))}
           {DAYS.map((day) => (
             <div key={day} className="contents">
-              <div className="sticky left-0 z-10 bg-background p-2 text-sm font-semibold border-r border-b">
+              <div className="sticky left-0 z-10 bg-background p-2 text-sm font-semibold border-r border-b flex items-center gap-2">
                 {day}
               </div>
               {HOURS.map((h) => {

@@ -15,6 +15,7 @@ import {
   getFacultyWorkload
 } from "./routes/faculty-comprehensive";
 import telegramRoutes from "./routes/telegram";
+import telegramEventsRoutes from "./routes/telegram-events";
 import { initializeTelegramService } from "./services/telegramService";
 import { 
   getUserDepartments, 
@@ -232,6 +233,7 @@ export function createServer() {
 
   // Telegram routes
   app.use("/api/telegram", telegramRoutes);
+  app.use("/api/telegram/events", telegramEventsRoutes);
 
   return app;
 }

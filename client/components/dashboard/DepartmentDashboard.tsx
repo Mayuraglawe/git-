@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,6 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useDepartment, DepartmentThemed } from '@/contexts/DepartmentContext';
 import MessageToPrincipal from '@/components/communication/MessageToPrincipal';
-
 // ============================================================================
 // DEPARTMENT DASHBOARD COMPONENT
 // ============================================================================
@@ -717,6 +716,7 @@ export default function DepartmentDashboard() {
         </CardContent>
       </Card>
 
+
       {/* Message to Principal - Publisher Only */}
       <MessageToPrincipal />
 
@@ -803,7 +803,7 @@ export function DepartmentIsolationDemo() {
                     </div>
                   </div>
                   <div className="mt-3 text-xs text-muted-foreground">
-                    🔒 Only {dept.code} users can see this data
+                    ðŸ”’ Only {dept.code} users can see this data
                   </div>
                 </CardContent>
               </Card>

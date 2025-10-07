@@ -12,6 +12,9 @@ A sophisticated academic timetable generation system built with modern web techn
 - **Quality Scoring**: Algorithmic assessment of schedule optimality
 - **Interactive Timetable Grid**: Visual representation with drag-drop potential
 - **Academic Entity Management**: Faculty, subjects, classrooms, and student batches
+- **🚨 Emergency Holiday Declaration**: Multi-channel notification system for institutional closures
+- **Indian Holiday Calendar**: Pre-loaded with 30+ Indian national and festival holidays for 2025
+- **Event Management**: Comprehensive event scheduling with conflict detection and queue system
 
 ### Technical Highlights
 - **Modern React 18** with TypeScript

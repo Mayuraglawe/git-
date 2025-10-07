@@ -27,7 +27,7 @@ const supabasePromise = getSupabaseAdminClient();
  */
 export const getDepartments: RequestHandler = async (req, res) => {
   try {
-    const supabase = await supabasePromise;
+    const supabase = getSupabaseAdminClient();
     const { 
       page = 1, 
       limit = 10, 
@@ -108,7 +108,7 @@ export const getDepartments: RequestHandler = async (req, res) => {
  */
 export const getDepartmentById: RequestHandler = async (req, res) => {
   try {
-    const supabase = await supabasePromise;
+    const supabase = getSupabaseAdminClient();
     const { id } = req.params;
     const { include_hod, include_stats, include_faculty } = req.query;
 
@@ -257,7 +257,7 @@ export const createDepartment: RequestHandler = async (req, res) => {
  */
 export const updateDepartment: RequestHandler = async (req, res) => {
   try {
-    const supabase = await supabasePromise;
+    const supabase = getSupabaseAdminClient();
     const { id } = req.params;
     const updateData: UpdateDepartmentRequest = req.body;
 
@@ -355,7 +355,7 @@ export const updateDepartment: RequestHandler = async (req, res) => {
  */
 export const deleteDepartment: RequestHandler = async (req, res) => {
   try {
-    const supabase = await supabasePromise;
+    const supabase = getSupabaseAdminClient();
     const { id } = req.params;
     const { hard_delete } = req.query;
 
@@ -473,7 +473,7 @@ export const deleteDepartment: RequestHandler = async (req, res) => {
  */
 export const assignHOD: RequestHandler = async (req, res) => {
   try {
-    const supabase = await supabasePromise;
+    const supabase = getSupabaseAdminClient();
     const { id } = req.params;
     const { faculty_id } = req.body;
 
@@ -556,7 +556,7 @@ export const assignHOD: RequestHandler = async (req, res) => {
  */
 export const getDepartmentFaculty: RequestHandler = async (req, res) => {
   try {
-    const supabase = await supabasePromise;
+    const supabase = getSupabaseAdminClient();
     const { id } = req.params;
     const { active_only = 'true' } = req.query;
 
@@ -606,7 +606,7 @@ export const getDepartmentFaculty: RequestHandler = async (req, res) => {
  */
 export const getDepartmentStatistics: RequestHandler = async (req, res) => {
   try {
-    const supabase = await supabasePromise;
+    const supabase = getSupabaseAdminClient();
     const { id } = req.params;
     const { academic_year, semester } = req.query;
 
@@ -663,4 +663,5 @@ export const getDepartmentStatistics: RequestHandler = async (req, res) => {
     } as ApiError as unknown as ApiError);
   }
 };
+
 

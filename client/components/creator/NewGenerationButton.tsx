@@ -40,13 +40,15 @@ interface AssignmentInfo {
 interface NewGenerationButtonProps {
   creatorId?: string;
   departmentId?: string;
+  variant?: 'default' | 'navigation';
 }
 
 export const NewGenerationButton: React.FC<NewGenerationButtonProps> = ({ 
   creatorId, 
-  departmentId 
+  departmentId,
+  variant = 'default'
 }) => {
-  const { user } = useAuth();
+  const { user, isCreatorMentor } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'exam' | 'assignment'>('exam');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,9 +59,19 @@ export const NewGenerationButton: React.FC<NewGenerationButtonProps> = ({
   const actualDepartmentId = departmentId || user?.departments?.[0]?.id;
 
   // Don't render if user is not a creator mentor
-  if (!user || user.role !== 'mentor' || user.mentor_type !== 'creator') {
+  if (!user || !isCreatorMentor()) {
+    console.log('NewGenerationButton not showing - User:', user, 'isCreatorMentor:', isCreatorMentor());
     return null;
   }
+
+  console.log('NewGenerationButton rendering - User:', user, 'Variant:', variant);
+
+  // Button styling based on variant
+  const buttonClassName = variant === 'navigation'
+    ? "rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold hover:scale-105 transition-transform"
+    : "bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold px-6 py-3 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105";
+
+  const buttonSize = variant === 'navigation' ? 'lg' : undefined;
 
   // Exam form state
   const [examForm, setExamForm] = useState<ExamInfo>({
@@ -241,7 +253,11 @@ export const NewGenerationButton: React.FC<NewGenerationButtonProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold px-6 py-3 rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105">
+        <Button 
+          className={buttonClassName}
+          size={buttonSize}
+          data-new-generation-trigger
+        >
           <Plus className="mr-2 h-5 w-5" />
           New Generation
         </Button>

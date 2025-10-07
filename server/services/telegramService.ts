@@ -48,6 +48,20 @@ interface AssignmentNotificationPayload {
   departmentName?: string;
 }
 
+interface EventNotificationPayload {
+  title: string;
+  eventType: string;
+  startDate: string;
+  startTime: string;
+  endTime?: string;
+  venue?: string;
+  description?: string;
+  expectedParticipants?: number;
+  creatorName?: string;
+  departmentName?: string;
+  reminderMinutes?: number;
+}
+
 /**
  * Telegram Service for handling publisher-to-principal communication
  * Allows publishers to send messages directly to the principal via Telegram bot
@@ -498,6 +512,133 @@ ${examTypeIcon} <b>${examTypeName} Exam Scheduled</b>
   }
 
   /**
+   * Send event notification to a Telegram chat
+   */
+  public async sendEventNotification(
+    chatId: string,
+    payload: EventNotificationPayload
+  ): Promise<SendMessageResult> {
+    try {
+      if (!this.isInitialized || !this.bot) {
+        return {
+          success: false,
+          error: 'Telegram bot is not initialized'
+        };
+      }
+
+      const formattedMessage = this.formatEventNotification(payload);
+
+      const result = await this.bot.sendMessage(chatId, formattedMessage, {
+        parse_mode: 'HTML',
+        disable_notification: false
+      });
+
+      console.log(`✅ Event notification sent to chat ${chatId}`);
+
+      return {
+        success: true,
+        messageId: result.message_id
+      };
+    } catch (error) {
+      console.error('❌ Failed to send event notification:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
+   * Broadcast event notification to multiple chats
+   */
+  public async broadcastEventNotification(
+    chatIds: string[],
+    payload: EventNotificationPayload
+  ): Promise<{ successful: number; failed: number }> {
+    let successful = 0;
+    let failed = 0;
+
+    for (const chatId of chatIds) {
+      const result = await this.sendEventNotification(chatId, payload);
+      if (result.success) {
+        successful++;
+      } else {
+        failed++;
+      }
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    console.log(`📊 Event broadcast complete: ${successful} successful, ${failed} failed`);
+    return { successful, failed };
+  }
+
+  /**
+   * Format event notification message
+   */
+  private formatEventNotification(payload: EventNotificationPayload): string {
+    const eventTypeIcons: Record<string, string> = {
+      'workshop': '🎓',
+      'seminar': '📊',
+      'conference': '🎤',
+      'cultural': '🎭',
+      'sports': '⚽',
+      'technical': '💻',
+      'orientation': '🎯',
+      'examination': '📝',
+      'meeting': '👥',
+      'other': '📅'
+    };
+
+    const icon = eventTypeIcons[payload.eventType.toLowerCase()] || '📅';
+    
+    let message = `
+${icon} <b>Event Notification</b>
+
+<b>Event:</b> ${payload.title}
+<b>Type:</b> ${payload.eventType}
+<b>Date:</b> ${payload.startDate}
+<b>Time:</b> ${payload.startTime}`;
+
+    if (payload.endTime) {
+      message += ` - ${payload.endTime}`;
+    }
+
+    if (payload.venue) {
+      message += `\n<b>Venue:</b> ${payload.venue}`;
+    }
+
+    if (payload.expectedParticipants) {
+      message += `\n<b>Expected Participants:</b> ${payload.expectedParticipants}`;
+    }
+
+    if (payload.description) {
+      message += `\n\n<b>Description:</b>\n${payload.description}`;
+    }
+
+    if (payload.creatorName) {
+      message += `\n\n<b>Organized by:</b> ${payload.creatorName}`;
+    }
+
+    if (payload.departmentName) {
+      message += `\n<b>Department:</b> ${payload.departmentName}`;
+    }
+
+    if (payload.reminderMinutes) {
+      const hours = Math.floor(payload.reminderMinutes / 60);
+      const mins = payload.reminderMinutes % 60;
+      let reminderText = '';
+      if (hours > 0) reminderText += `${hours}h `;
+      if (mins > 0) reminderText += `${mins}m`;
+      message += `\n\n⏰ <i>Reminder: ${reminderText.trim()} before event</i>`;
+    }
+
+    message += `\n\n📱 <i>Notification from Py-Gram 2k25</i>`;
+
+    return message;
+  }
+
+  /**
    * Check if the service is ready to send messages
    */
   public isReady(): boolean {
@@ -555,5 +696,6 @@ export type {
   SendMessageResult, 
   TelegramConfig,
   ExamNotificationPayload,
-  AssignmentNotificationPayload
+  AssignmentNotificationPayload,
+  EventNotificationPayload
 };

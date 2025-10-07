@@ -607,8 +607,15 @@ export function getSupabaseClient() {
   return supabaseClient;
 }
 
-// Admin client for server-side operations
+// Admin client for server-side operations with singleton pattern
+let adminClient: ReturnType<typeof createSupabaseClient> | null = null;
+
 export function getSupabaseAdminClient() {
+  // Return cached instance if available
+  if (adminClient) {
+    return adminClient;
+  }
+  
   const url = getSupabaseUrl();
   const serviceKey = getSupabaseServiceKey();
   
@@ -616,5 +623,7 @@ export function getSupabaseAdminClient() {
     throw new Error('Supabase URL and Service Role Key are required for admin operations.');
   }
   
-  return createSupabaseClient(url, serviceKey);
+  // Create and cache the admin client
+  adminClient = createSupabaseClient(url, serviceKey);
+  return adminClient;
 }

@@ -14,12 +14,22 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Switch } from '@/components/ui/switch';
 import { 
   Plus, Calendar as CalendarIcon, Clock, MapPin, Users, AlertTriangle, 
-  CheckCircle, XCircle, Timer, Bell, Filter, Search, Eye, Edit, Trash2, List 
+  CheckCircle, XCircle, Timer, Bell, Filter, Search, Eye, Edit, Trash2, List,
+  Keyboard, HelpCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import EventCalendar from '@/components/events/EventCalendar';
 import EventDetailModal from '@/components/events/EventDetailModal';
+import CalendarViews from '@/components/events/CalendarViews';
+import WorkingHoursSettings from '@/components/events/WorkingHoursSettings';
+import TaskManager from '@/components/events/TaskManager';
+import { EventTemplatePicker, QuickAddDialog, duplicateEvent, parseNaturalLanguage } from '@/components/events/EventTemplates';
+import { EventSharingDialog, addEventShare, getEventShares, FreeBusyViewer, calculateFreeBusySlots } from '@/components/events/EventSharing';
+import type { EventShare, FreeBusySlot } from '@/components/events/EventSharing';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { sendEventNotification, scheduleEventReminders } from '@/services/telegram-event-service';
 
 // Event types and statuses
 const eventTypes = [
@@ -163,6 +173,16 @@ interface EventFormData {
   registration_required: boolean;
   max_registrations: number;
   registration_deadline: Date | undefined;
+  // Recurring events
+  is_recurring: boolean;
+  recurrence_pattern: 'daily' | 'weekly' | 'monthly' | 'custom' | '';
+  recurrence_end_date: Date | undefined;
+  recurrence_days: number[]; // For weekly: [0-6] for Sun-Sat
+  recurrence_interval: number; // Every N days/weeks/months
+  // Color coding
+  event_color: string;
+  // Reminders
+  reminders: Array<{ type: 'telegram' | 'email' | 'in-app'; minutes_before: number }>;
 }
 
 export default function Events() {
@@ -176,7 +196,250 @@ export default function Events() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
-  const [activeView, setActiveView] = useState<'calendar' | 'list'>('calendar');
+  const [activeView, setActiveView] = useState<'calendar' | 'list' | 'day' | 'week' | 'agenda'>('calendar');
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  
+  // New state for additional features
+  const [isWorkingHoursOpen, setIsWorkingHoursOpen] = useState(false);
+  const [isTaskManagerOpen, setIsTaskManagerOpen] = useState(false);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isSharingDialogOpen, setIsSharingDialogOpen] = useState(false);
+  const [eventShares, setEventShares] = useState<EventShare[]>([]);
+  const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
+  const [venueSuggestions, setVenueSuggestions] = useState<string[]>([]);
+  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
+  const [showVenueSuggestions, setShowVenueSuggestions] = useState(false);
+
+  // Common event title suggestions based on event type
+  const eventTitleTemplates = {
+    'Workshop': ['Workshop on', 'Technical Workshop:', 'Hands-on Workshop:', 'Interactive Workshop:'],
+    'Seminar': ['Seminar on', 'Guest Seminar:', 'Industry Seminar:', 'Academic Seminar:'],
+    'Conference': ['Conference on', 'National Conference:', 'International Conference:', 'Annual Conference:'],
+    'Webinar': ['Webinar on', 'Online Webinar:', 'Guest Webinar:', 'Expert Webinar:'],
+    'Meeting': ['Meeting on', 'Department Meeting:', 'Team Meeting:', 'Review Meeting:'],
+    'Exam': ['Exam:', 'Final Exam:', 'Mid-term Exam:', 'Practical Exam:'],
+    'Lab': ['Lab Session:', 'Practical Lab:', 'Laboratory:', 'Lab Work:'],
+    'Sports': ['Sports Event:', 'Tournament:', 'Match:', 'Championship:'],
+    'Cultural': ['Cultural Event:', 'Festival:', 'Celebration:', 'Annual Day:']
+  };
+
+  // Common venue suggestions
+  const commonVenues = [
+    'Auditorium',
+    'Seminar Hall',
+    'Conference Room',
+    'Classroom 101',
+    'Classroom 102',
+    'Classroom 201',
+    'Lab 1',
+    'Lab 2',
+    'Computer Lab',
+    'Sports Ground',
+    'Library',
+    'Cafeteria',
+    'Main Hall',
+    'Smart Classroom',
+    'Online (Zoom)',
+    'Online (Google Meet)',
+    'Online (Teams)'
+  ];
+
+  // Helper function to capitalize first letter
+  const capitalizeFirst = (text: string): string => {
+    if (!text) return text;
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  };
+
+  // Handle title input with autocomplete
+  const handleTitleInput = (value: string) => {
+    // Capitalize first letter automatically
+    const capitalizedValue = capitalizeFirst(value);
+    setFormData({ ...formData, title: capitalizedValue });
+
+    // Generate suggestions based on event type
+    if (capitalizedValue.length > 0 && formData.event_type) {
+      const templates = eventTitleTemplates[formData.event_type as keyof typeof eventTitleTemplates] || [];
+      const filtered = templates.filter(template => 
+        template.toLowerCase().includes(capitalizedValue.toLowerCase()) ||
+        capitalizedValue.toLowerCase().includes(template.toLowerCase())
+      );
+      
+      // Add existing event titles that match
+      const existingTitles = events
+        .filter(e => e.event_type === formData.event_type)
+        .map(e => e.title)
+        .filter(t => t.toLowerCase().includes(capitalizedValue.toLowerCase()))
+        .slice(0, 3);
+      
+      setTitleSuggestions([...new Set([...filtered, ...existingTitles])].slice(0, 5));
+      setShowTitleSuggestions(true);
+    } else {
+      setShowTitleSuggestions(false);
+    }
+  };
+
+  // Handle venue input with autocomplete
+  const handleVenueInput = (value: string) => {
+    // Capitalize first letter automatically
+    const capitalizedValue = capitalizeFirst(value);
+    setFormData({ ...formData, venue: capitalizedValue });
+
+    // Generate venue suggestions
+    if (capitalizedValue.length > 0) {
+      const filtered = commonVenues.filter(venue => 
+        venue.toLowerCase().includes(capitalizedValue.toLowerCase())
+      );
+      
+      // Add existing venues that match
+      const existingVenues = [...new Set(events.map(e => e.venue))]
+        .filter(v => v && v.toLowerCase().includes(capitalizedValue.toLowerCase()))
+        .slice(0, 3);
+      
+      setVenueSuggestions([...new Set([...filtered, ...existingVenues])].slice(0, 5));
+      setShowVenueSuggestions(true);
+    } else {
+      setShowVenueSuggestions(false);
+    }
+  };
+
+  // Handle description input with capitalization
+  const handleDescriptionInput = (value: string) => {
+    // Capitalize first letter automatically
+    const capitalizedValue = capitalizeFirst(value);
+    setFormData({ ...formData, description: capitalizedValue });
+  };
+
+  // Helper function to send Telegram notification
+  const sendTelegramNotification = async (event: any, messageType: 'created' | 'updated' | 'approved' | 'rejected' | 'queue_update') => {
+    const chatId = process.env.VITE_TELEGRAM_PRINCIPAL_CHAT_ID || 
+                   localStorage.getItem('telegram_chat_id') || '';
+    
+    if (!chatId) {
+      console.warn('⚠️ No Telegram chat ID configured');
+      return;
+    }
+
+    try {
+      const department = mockDepartments.find(d => d.id === event.department_id);
+      let titlePrefix = '';
+      let descriptionPrefix = '';
+
+      switch (messageType) {
+        case 'created':
+          titlePrefix = '🆕 NEW: ';
+          descriptionPrefix = '[Event Created]\n\n';
+          break;
+        case 'updated':
+          titlePrefix = '📝 UPDATED: ';
+          descriptionPrefix = '[Event Updated]\n\n';
+          break;
+        case 'approved':
+          titlePrefix = '✅ APPROVED: ';
+          descriptionPrefix = '[Event Approved - No longer in queue]\n\n';
+          break;
+        case 'rejected':
+          titlePrefix = '❌ REJECTED: ';
+          descriptionPrefix = '[Event Rejected]\n\n';
+          break;
+        case 'queue_update':
+          titlePrefix = '🔄 QUEUE UPDATE: ';
+          descriptionPrefix = `[Queue Position Changed]\nNew Position: ${event.conflict_info?.queue_position || 'N/A'}\n\n`;
+          break;
+      }
+
+      const eventNotificationData = {
+        title: titlePrefix + event.title,
+        event_type: event.event_type,
+        start_date: format(new Date(event.start_date), 'MMMM d, yyyy'),
+        start_time: event.start_time,
+        end_time: event.end_time,
+        venue: event.venue,
+        description: descriptionPrefix + (event.description || ''),
+        expected_participants: event.expected_participants,
+        creator_name: event.creator?.first_name + ' ' + event.creator?.last_name || 'Unknown',
+        department_name: department?.name || 'Unknown Department'
+      };
+
+      const result = await sendEventNotification(chatId, eventNotificationData);
+      
+      if (result.success) {
+        console.log(`✅ ${messageType} notification sent`);
+      } else {
+        console.error(`❌ Failed to send ${messageType} notification:`, result.error);
+      }
+    } catch (error) {
+      console.error('Error sending Telegram notification:', error);
+    }
+  };
+
+  // Update queue positions and notify affected events
+  const updateQueuePositions = async (startDate: string, endDate: string, venue: string) => {
+    // Find all events with conflicts on this date/venue
+    const conflictingEvents = events.filter(e => {
+      if (e.status === 'cancelled' || e.status === 'rejected') return false;
+      
+      const eventStart = e.start_date;
+      const eventEnd = e.end_date;
+      const eventVenue = e.venue;
+
+      return eventVenue === venue &&
+             ((eventStart >= startDate && eventStart <= endDate) ||
+              (eventEnd >= startDate && eventEnd <= endDate) ||
+              (eventStart <= startDate && eventEnd >= endDate));
+    }).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    // Update queue positions
+    const updatedEvents = events.map(event => {
+      const conflictIndex = conflictingEvents.findIndex(e => e.id === event.id);
+      
+      if (conflictIndex === -1) return event;
+
+      const approvedCount = conflictingEvents.slice(0, conflictIndex).filter(e => e.status === 'approved').length;
+      const newQueuePosition = conflictIndex - approvedCount + 1;
+      const oldQueuePosition = event.conflict_info?.queue_position;
+
+      // Only update if position changed
+      if (newQueuePosition !== oldQueuePosition && event.status === 'pending') {
+        const updatedEvent = {
+          ...event,
+          conflict_info: {
+            ...event.conflict_info,
+            queue_position: newQueuePosition,
+            has_conflict: true,
+            conflicting_events: conflictingEvents.map(e => e.id)
+          }
+        };
+
+        // Send queue update notification
+        sendTelegramNotification(updatedEvent, 'queue_update');
+
+        return updatedEvent;
+      }
+
+      return event;
+    });
+
+    setEvents(updatedEvents);
+  };
+
+  // Notify when event is approved
+  const notifyEventApproval = async (event: any) => {
+    await sendTelegramNotification(event, 'approved');
+  };
+
+  // Notify when event is rejected
+  const notifyEventRejection = async (event: any, reason: string) => {
+    await sendTelegramNotification(
+      { ...event, description: `Rejection Reason: ${reason}\n\n${event.description}` },
+      'rejected'
+    );
+  };
+
+  // Notify when event moves up in queue
+  const notifyQueuePromotion = async (event: any) => {
+    await sendTelegramNotification(event, 'approved');
+  };
+  
   const [formData, setFormData] = useState<EventFormData>({
     title: '',
     description: '',
@@ -197,7 +460,14 @@ export default function Events() {
     is_public: true,
     registration_required: false,
     max_registrations: 0,
-    registration_deadline: undefined
+    registration_deadline: undefined,
+    is_recurring: false,
+    recurrence_pattern: '',
+    recurrence_end_date: undefined,
+    recurrence_days: [],
+    recurrence_interval: 1,
+    event_color: '#3B82F6',
+    reminders: [{ type: 'telegram', minutes_before: 60 }]
   });
 
   // Department-based data segregation
@@ -259,7 +529,7 @@ export default function Events() {
     };
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.start_date || !formData.end_date) {
@@ -294,8 +564,22 @@ export default function Events() {
     if (selectedEvent) {
       // Update existing event
       const updatedEvent = { ...selectedEvent, ...eventData };
+      const previousStatus = selectedEvent.status;
+      const previousQueuePosition = selectedEvent.conflict_info?.queue_position;
+      
       setEvents(events.map(e => e.id === selectedEvent.id ? updatedEvent : e));
       setIsEditDialogOpen(false);
+
+      // Always send Telegram notification for event update
+      await sendTelegramNotification(updatedEvent, 'updated');
+
+      // Check if status changed from pending to approved
+      if (previousStatus === 'pending' && updatedEvent.status === 'approved') {
+        await notifyQueuePromotion(updatedEvent);
+      }
+
+      // Update queue for all affected events
+      await updateQueuePositions(startDateStr, endDateStr, venue);
     } else {
       // Add new event
       const newEvent = {
@@ -304,6 +588,14 @@ export default function Events() {
       };
       setEvents([...events, newEvent]);
       setIsAddDialogOpen(false);
+
+      // Always send Telegram notification for new event
+      await sendTelegramNotification(newEvent, 'created');
+
+      // Update queue for all affected events
+      if (conflictCheck.has_conflict) {
+        await updateQueuePositions(startDateStr, endDateStr, venue);
+      }
     }
     
     resetForm();
@@ -335,7 +627,14 @@ export default function Events() {
       is_public: true,
       registration_required: false,
       max_registrations: 0,
-      registration_deadline: undefined
+      registration_deadline: undefined,
+      is_recurring: false,
+      recurrence_pattern: '',
+      recurrence_end_date: undefined,
+      recurrence_days: [],
+      recurrence_interval: 1,
+      event_color: '#3B82F6',
+      reminders: [{ type: 'telegram', minutes_before: 60 }]
     });
     setSelectedEvent(null);
   };
@@ -362,27 +661,59 @@ export default function Events() {
       is_public: event.is_public,
       registration_required: event.registration_required,
       max_registrations: event.max_registrations || 0,
-      registration_deadline: event.registration_deadline ? new Date(event.registration_deadline) : undefined
+      registration_deadline: event.registration_deadline ? new Date(event.registration_deadline) : undefined,
+      is_recurring: event.is_recurring || false,
+      recurrence_pattern: event.recurrence_pattern || '',
+      recurrence_end_date: event.recurrence_end_date ? new Date(event.recurrence_end_date) : undefined,
+      recurrence_days: event.recurrence_days || [],
+      recurrence_interval: event.recurrence_interval || 1,
+      event_color: event.event_color || '#3B82F6',
+      reminders: event.reminders || [{ type: 'telegram', minutes_before: 60 }]
     });
     setIsEditDialogOpen(true);
   };
 
-  const handleDelete = (eventId: string) => {
+  const handleDelete = async (eventId: string) => {
     if (confirm('Are you sure you want to delete this event?')) {
+      const deletedEvent = events.find(e => e.id === eventId);
       setEvents(events.filter(e => e.id !== eventId));
+      
+      // Update queue positions after deletion
+      if (deletedEvent) {
+        await updateQueuePositions(
+          deletedEvent.start_date,
+          deletedEvent.end_date,
+          deletedEvent.venue
+        );
+      }
     }
   };
 
-  const handleApprove = (eventId: string) => {
+  const handleApprove = async (eventId: string) => {
+    const event = events.find(e => e.id === eventId);
+    
     setEvents(events.map(e => 
       e.id === eventId ? { ...e, status: 'approved', approved_at: new Date().toISOString() } : e
     ));
+
+    // Notify about approval and update queue
+    if (event) {
+      await notifyEventApproval(event);
+      await updateQueuePositions(event.start_date, event.end_date, event.venue);
+    }
   };
 
-  const handleReject = (eventId: string, reason: string) => {
+  const handleReject = async (eventId: string, reason: string) => {
+    const event = events.find(e => e.id === eventId);
+    
     setEvents(events.map(e => 
       e.id === eventId ? { ...e, status: 'rejected', rejection_reason: reason } : e
     ));
+
+    // Notify about rejection
+    if (event) {
+      await notifyEventRejection(event, reason);
+    }
   };
 
   // Calendar event handlers
@@ -407,6 +738,58 @@ export default function Events() {
     setIsAddDialogOpen(true);
   };
 
+  // Handle template selection
+  const handleTemplateSelect = (template: any) => {
+    const now = new Date();
+    const startDate = new Date(now);
+    startDate.setHours(9, 0, 0, 0); // Default to 9 AM
+    const endDate = new Date(startDate);
+    endDate.setHours(startDate.getHours() + template.duration_hours);
+
+    setFormData({
+      ...formData,
+      title: template.name,
+      event_type: template.event_type,
+      start_date: startDate,
+      end_date: endDate,
+      start_time: format(startDate, 'HH:mm'),
+      end_time: format(endDate, 'HH:mm'),
+      venue: template.default_venue || '',
+      expected_participants: template.default_participants || 0,
+      description: template.description_template || '',
+      event_color: template.color
+    });
+    setIsAddDialogOpen(true);
+  };
+
+  // Handle quick add from natural language
+  const handleQuickAddEvent = (quickEvent: any) => {
+    const endDate = new Date(quickEvent.date);
+    endDate.setHours(endDate.getHours() + 1); // Default 1 hour duration
+
+    setFormData({
+      ...formData,
+      title: quickEvent.title,
+      start_date: quickEvent.date,
+      end_date: endDate,
+      start_time: quickEvent.time,
+      end_time: format(endDate, 'HH:mm')
+    });
+    setIsAddDialogOpen(true);
+  };
+
+  // Handle event duplication
+  const handleDuplicateEvent = (event: any) => {
+    const duplicated = duplicateEvent(event);
+    setEvents([...events, duplicated]);
+  };
+
+  // Handle event sharing
+  const handleShareEvent = (share: any) => {
+    const newShare = addEventShare(share);
+    setEventShares([...eventShares, newShare]);
+  };
+
   // Transform events for calendar component
   const calendarEvents = events.map(event => ({
     id: event.id,
@@ -427,8 +810,110 @@ export default function Events() {
     queue_position: event.conflict_info?.queue_position,
     conflict_with: event.conflict_info?.conflicting_events?.map(id => 
       events.find(e => e.id === id)?.title || 'Unknown Event'
-    )
+    ),
+    event_color: (event as any).event_color,
+    is_recurring: (event as any).is_recurring,
+    recurrence_pattern: (event as any).recurrence_pattern
   }));
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    {
+      key: 'n',
+      description: 'Create new event',
+      callback: () => {
+        if (hasPermission('create_events')) {
+          handleCreateEvent();
+        }
+      }
+    },
+    {
+      key: 'ArrowLeft',
+      description: 'Previous month',
+      callback: () => {
+        // Navigation handled by calendar component
+      }
+    },
+    {
+      key: 'ArrowRight',
+      description: 'Next month',
+      callback: () => {
+        // Navigation handled by calendar component
+      }
+    },
+    {
+      key: '/',
+      description: 'Focus search',
+      callback: () => {
+        document.getElementById('event-search')?.focus();
+      }
+    },
+    {
+      key: 'q',
+      ctrl: true,
+      description: 'Quick add event',
+      callback: () => setIsQuickAddOpen(true)
+    },
+    {
+      key: 't',
+      ctrl: true,
+      description: 'Open tasks',
+      callback: () => setIsTaskManagerOpen(true)
+    },
+    {
+      key: 'h',
+      ctrl: true,
+      description: 'Working hours settings',
+      callback: () => setIsWorkingHoursOpen(true)
+    },
+    {
+      key: 'Escape',
+      description: 'Close dialogs',
+      callback: () => {
+        setIsAddDialogOpen(false);
+        setIsEditDialogOpen(false);
+        setIsDetailModalOpen(false);
+        setShowKeyboardHelp(false);
+        setIsQuickAddOpen(false);
+        setIsSharingDialogOpen(false);
+        setIsTaskManagerOpen(false);
+        setIsWorkingHoursOpen(false);
+      }
+    },
+    {
+      key: '?',
+      shift: true,
+      description: 'Show keyboard shortcuts',
+      callback: () => {
+        setShowKeyboardHelp(!showKeyboardHelp);
+      }
+    },
+    {
+      key: 'm',
+      description: 'Switch to month view',
+      callback: () => setActiveView('calendar')
+    },
+    {
+      key: 'w',
+      description: 'Switch to week view',
+      callback: () => setActiveView('week')
+    },
+    {
+      key: 'd',
+      description: 'Switch to day view',
+      callback: () => setActiveView('day')
+    },
+    {
+      key: 'a',
+      description: 'Switch to agenda view',
+      callback: () => setActiveView('agenda')
+    },
+    {
+      key: 'l',
+      description: 'Switch to list view',
+      callback: () => setActiveView('list')
+    }
+  ]);
 
   const getEventTypeInfo = (type: string) => {
     return eventTypes.find(t => t.value === type) || eventTypes[eventTypes.length - 1];
@@ -437,15 +922,35 @@ export default function Events() {
   const EventForm = () => (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <div>
+        <div className="relative">
           <Label htmlFor="title">Event Title</Label>
           <Input
             id="title"
             value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            onChange={(e) => handleTitleInput(e.target.value)}
+            onFocus={() => formData.title && setShowTitleSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowTitleSuggestions(false), 200)}
             placeholder="AI/ML Workshop"
             required
           />
+          {showTitleSuggestions && titleSuggestions.length > 0 && (
+            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-auto">
+              {titleSuggestions.map((suggestion, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  className="w-full px-4 py-2 text-left hover:bg-gray-100 transition-colors text-sm"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setFormData({ ...formData, title: suggestion });
+                    setShowTitleSuggestions(false);
+                  }}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <Label htmlFor="event_type">Event Type</Label>
@@ -469,7 +974,7 @@ export default function Events() {
         <Textarea
           id="description"
           value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          onChange={(e) => handleDescriptionInput(e.target.value)}
           placeholder="Brief description of the event..."
           rows={3}
         />
@@ -581,11 +1086,41 @@ export default function Events() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
+        <div className="relative">
+          <Label htmlFor="venue">Venue/Classroom</Label>
+          <Input
+            id="venue"
+            value={formData.venue}
+            onChange={(e) => handleVenueInput(e.target.value)}
+            onFocus={() => formData.venue && setShowVenueSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowVenueSuggestions(false), 200)}
+            placeholder="Auditorium, Lab 1, etc."
+            required
+          />
+          {showVenueSuggestions && venueSuggestions.length > 0 && (
+            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-auto">
+              {venueSuggestions.map((suggestion, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  className="w-full px-4 py-2 text-left hover:bg-gray-100 transition-colors text-sm"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setFormData({ ...formData, venue: suggestion });
+                    setShowVenueSuggestions(false);
+                  }}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div>
-          <Label htmlFor="classroom">Venue/Classroom</Label>
+          <Label htmlFor="classroom">Classroom (Optional)</Label>
           <Select value={formData.classroom_id} onValueChange={(value) => setFormData({ ...formData, classroom_id: value })}>
             <SelectTrigger>
-              <SelectValue placeholder="Select venue" />
+              <SelectValue placeholder="Select classroom" />
             </SelectTrigger>
             <SelectContent>
               {mockClassrooms.map(room => (
@@ -596,6 +1131,9 @@ export default function Events() {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="participants">Expected Participants</Label>
           <Input
@@ -606,18 +1144,18 @@ export default function Events() {
             min="0"
           />
         </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4">
         <div>
           <Label htmlFor="contact_person">Contact Person</Label>
           <Input
             id="contact_person"
             value={formData.contact_person}
-            onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
+            onChange={(e) => setFormData({ ...formData, contact_person: capitalizeFirst(e.target.value) })}
             placeholder="Dr. John Smith"
           />
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="contact_email">Contact Email</Label>
           <Input
@@ -655,6 +1193,211 @@ export default function Events() {
             onCheckedChange={(checked) => setFormData({ ...formData, registration_required: checked })}
           />
           <Label htmlFor="registration_required">Registration Required</Label>
+        </div>
+      </div>
+
+      {/* Recurring Events Section */}
+      <div className="border-t pt-4 mt-4">
+        <div className="flex items-center space-x-2 mb-4">
+          <Switch
+            id="is_recurring"
+            checked={formData.is_recurring}
+            onCheckedChange={(checked) => setFormData({ ...formData, is_recurring: checked })}
+          />
+          <Label htmlFor="is_recurring" className="font-semibold">Recurring Event</Label>
+        </div>
+
+        {formData.is_recurring && (
+          <div className="space-y-4 pl-6 border-l-2 border-primary/20">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="recurrence_pattern">Repeat Pattern</Label>
+                <Select 
+                  value={formData.recurrence_pattern} 
+                  onValueChange={(value: any) => setFormData({ ...formData, recurrence_pattern: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select pattern" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="recurrence_interval">Every</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="recurrence_interval"
+                    type="number"
+                    value={formData.recurrence_interval}
+                    onChange={(e) => setFormData({ ...formData, recurrence_interval: parseInt(e.target.value) || 1 })}
+                    min="1"
+                    className="w-20"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {formData.recurrence_pattern === 'daily' && 'day(s)'}
+                    {formData.recurrence_pattern === 'weekly' && 'week(s)'}
+                    {formData.recurrence_pattern === 'monthly' && 'month(s)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {formData.recurrence_pattern === 'weekly' && (
+              <div>
+                <Label>Repeat on</Label>
+                <div className="flex gap-2 mt-2">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                    <Button
+                      key={day}
+                      type="button"
+                      variant={formData.recurrence_days.includes(index) ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        const days = formData.recurrence_days.includes(index)
+                          ? formData.recurrence_days.filter(d => d !== index)
+                          : [...formData.recurrence_days, index];
+                        setFormData({ ...formData, recurrence_days: days });
+                      }}
+                    >
+                      {day}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <Label>Ends</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formData.recurrence_end_date ? format(formData.recurrence_end_date, 'PPP') : 'Pick end date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={formData.recurrence_end_date}
+                    onSelect={(date) => setFormData({ ...formData, recurrence_end_date: date })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Event Color Section */}
+      <div className="border-t pt-4 mt-4">
+        <Label htmlFor="event_color">Event Color</Label>
+        <div className="flex gap-2 mt-2">
+          {['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'].map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={`w-10 h-10 rounded-full border-2 ${formData.event_color === color ? 'border-gray-900 scale-110' : 'border-gray-300'} transition-all`}
+              style={{ backgroundColor: color }}
+              onClick={() => setFormData({ ...formData, event_color: color })}
+              title={color}
+            />
+          ))}
+          <Input
+            type="color"
+            value={formData.event_color}
+            onChange={(e) => setFormData({ ...formData, event_color: e.target.value })}
+            className="w-10 h-10 p-1 cursor-pointer"
+          />
+        </div>
+      </div>
+
+      {/* Reminders Section */}
+      <div className="border-t pt-4 mt-4">
+        <div className="flex items-center justify-between mb-4">
+          <Label className="font-semibold">Reminders</Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setFormData({
+                ...formData,
+                reminders: [...formData.reminders, { type: 'telegram', minutes_before: 60 }]
+              });
+            }}
+          >
+            <Bell className="h-4 w-4 mr-2" />
+            Add Reminder
+          </Button>
+        </div>
+        <div className="space-y-3">
+          {formData.reminders.map((reminder, index) => (
+            <div key={index} className="flex gap-2 items-end">
+              <div className="flex-1">
+                <Label>Type</Label>
+                <Select
+                  value={reminder.type}
+                  onValueChange={(value: any) => {
+                    const newReminders = [...formData.reminders];
+                    newReminders[index].type = value;
+                    setFormData({ ...formData, reminders: newReminders });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="telegram">Telegram</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="in-app">In-App</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1">
+                <Label>Time Before</Label>
+                <Select
+                  value={reminder.minutes_before.toString()}
+                  onValueChange={(value) => {
+                    const newReminders = [...formData.reminders];
+                    newReminders[index].minutes_before = parseInt(value);
+                    setFormData({ ...formData, reminders: newReminders });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15 minutes</SelectItem>
+                    <SelectItem value="30">30 minutes</SelectItem>
+                    <SelectItem value="60">1 hour</SelectItem>
+                    <SelectItem value="120">2 hours</SelectItem>
+                    <SelectItem value="1440">1 day</SelectItem>
+                    <SelectItem value="2880">2 days</SelectItem>
+                    <SelectItem value="10080">1 week</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFormData({
+                    ...formData,
+                    reminders: formData.reminders.filter((_, i) => i !== index)
+                  });
+                }}
+              >
+                <Trash2 className="h-4 w-4 text-red-600" />
+              </Button>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -713,22 +1456,33 @@ export default function Events() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Event Management</h1>
-          <p className="text-gray-600 mt-1">Manage college events with conflict detection and queue system</p>
+          <p className="text-gray-600 mt-1">Master your schedule like Google Calendar - with conflict detection & smart queue</p>
         </div>
         <div className="flex items-center gap-2">
-          <Tabs value={activeView} onValueChange={(value) => setActiveView(value as 'calendar' | 'list')}>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" onClick={() => setShowKeyboardHelp(!showKeyboardHelp)}>
+                  <Keyboard className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Keyboard Shortcuts (Shift+?)</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          
+          <Tabs value={activeView} onValueChange={(value) => setActiveView(value as any)}>
             <TabsList>
-              <TabsTrigger value="calendar">
-                <CalendarIcon className="h-4 w-4 mr-2" />
-                Calendar
-              </TabsTrigger>
-              <TabsTrigger value="list">
-                <List className="h-4 w-4 mr-2" />
-                List
-              </TabsTrigger>
+              <TabsTrigger value="calendar">Month</TabsTrigger>
+              <TabsTrigger value="week">Week</TabsTrigger>
+              <TabsTrigger value="day">Day</TabsTrigger>
+              <TabsTrigger value="agenda">Agenda</TabsTrigger>
+              <TabsTrigger value="list">List</TabsTrigger>
             </TabsList>
           </Tabs>
           {hasPermission('create_events') && (
+            <>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => resetForm()}>
@@ -746,9 +1500,172 @@ export default function Events() {
                 <EventForm />
               </DialogContent>
             </Dialog>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={() => setIsQuickAddOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Quick Add (Ctrl+Q)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={() => setIsTaskManagerOpen(true)}>
+                    <List className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Tasks (Ctrl+T)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={() => setIsWorkingHoursOpen(true)}>
+                    <Clock className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Working Hours (Ctrl+H)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={() => setShowKeyboardHelp(true)}>
+                    <Keyboard className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Shortcuts (?)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            </>
           )}
         </div>
       </div>
+
+      {/* Keyboard Shortcuts Help Dialog */}
+      <Dialog open={showKeyboardHelp} onOpenChange={setShowKeyboardHelp}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Keyboard Shortcuts</DialogTitle>
+            <DialogDescription>
+              Navigate and manage events faster with these shortcuts
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <p className="font-semibold">Navigation</p>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">M</kbd>
+                    <span>Month view</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">W</kbd>
+                    <span>Week view</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">D</kbd>
+                    <span>Day view</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">A</kbd>
+                    <span>Agenda view</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">L</kbd>
+                    <span>List view</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="font-semibold">Actions</p>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">N</kbd>
+                    <span>New event</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">Ctrl+Q</kbd>
+                    <span>Quick add</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">Ctrl+T</kbd>
+                    <span>Tasks</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">Ctrl+H</kbd>
+                    <span>Working hours</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">/</kbd>
+                    <span>Search events</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">Esc</kbd>
+                    <span>Close dialogs</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <kbd className="px-2 py-1 bg-muted rounded">?</kbd>
+                    <span>Show shortcuts</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Event Template Picker */}
+      <EventTemplatePicker onSelectTemplate={handleTemplateSelect} />
+
+      {/* Quick Add Dialog */}
+      <QuickAddDialog
+        open={isQuickAddOpen}
+        onOpenChange={setIsQuickAddOpen}
+        onEventCreated={handleQuickAddEvent}
+      />
+
+      {/* Working Hours Settings Dialog */}
+      <Dialog open={isWorkingHoursOpen} onOpenChange={setIsWorkingHoursOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Working Hours Settings</DialogTitle>
+            <DialogDescription>
+              Configure your working hours to receive warnings when scheduling events outside these times
+            </DialogDescription>
+          </DialogHeader>
+          <WorkingHoursSettings />
+        </DialogContent>
+      </Dialog>
+
+      {/* Task Manager Dialog */}
+      <Dialog open={isTaskManagerOpen} onOpenChange={setIsTaskManagerOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Task Manager</DialogTitle>
+            <DialogDescription>
+              Manage tasks and todos related to your events
+            </DialogDescription>
+          </DialogHeader>
+          <TaskManager />
+        </DialogContent>
+      </Dialog>
+
+      {/* Event Sharing Dialog */}
+      {selectedEvent && (
+        <EventSharingDialog
+          event={selectedEvent}
+          open={isSharingDialogOpen}
+          onOpenChange={setIsSharingDialogOpen}
+          onShare={handleShareEvent}
+          existingShares={getEventShares(selectedEvent.id)}
+          currentUserEmail={user?.email || ''}
+        />
+      )}
 
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -825,7 +1742,8 @@ export default function Events() {
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search events..."
+                id="event-search"
+                placeholder="Search events... (Press / to focus)"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -874,7 +1792,7 @@ export default function Events() {
           onDateClick={handleDateClick}
           onCreateEvent={handleCreateEvent}
         />
-      ) : (
+      ) : activeView === 'list' ? (
         /* Events List */
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {filteredEvents.map((event) => {
@@ -1005,6 +1923,13 @@ export default function Events() {
           );
         })}
         </div>
+      ) : (
+        <CalendarViews
+          view={activeView as 'day' | 'week' | 'agenda'}
+          currentDate={new Date()}
+          events={calendarEvents}
+          onEventClick={handleEventClick}
+        />
       )}
 
       {activeView === 'list' && filteredEvents.length === 0 && (

@@ -22,6 +22,9 @@ interface EventData {
   created_by: string;
   max_participants?: number;
   current_participants?: number;
+  event_color?: string;
+  is_recurring?: boolean;
+  recurrence_pattern?: string;
 }
 
 interface EventCalendarProps {
@@ -170,22 +173,33 @@ export default function EventCalendar({ events, onEventClick, onDateClick, onCre
                   </div>
 
                   <div className="space-y-1">
-                    {approvedEvents.slice(0, 2).map((event) => (
-                      <div
-                        key={event.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEventClick?.(event);
-                        }}
-                        className={cn(
-                          "text-xs p-1 rounded border truncate",
-                          EVENT_TYPE_COLORS[event.event_type as keyof typeof EVENT_TYPE_COLORS] || EVENT_TYPE_COLORS.other
-                        )}
-                        title={event.title}
-                      >
-                        {event.title}
-                      </div>
-                    ))}
+                    {approvedEvents.slice(0, 2).map((event) => {
+                      const eventColor = event.event_color || EVENT_TYPE_COLORS[event.event_type as keyof typeof EVENT_TYPE_COLORS] || EVENT_TYPE_COLORS.other;
+                      const isCustomColor = event.event_color && !Object.values(EVENT_TYPE_COLORS).includes(eventColor);
+                      
+                      return (
+                        <div
+                          key={event.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEventClick?.(event);
+                          }}
+                          className={cn(
+                            "text-xs p-1 rounded border truncate cursor-pointer hover:shadow-md transition-shadow",
+                            isCustomColor ? "border-gray-300" : eventColor
+                          )}
+                          style={isCustomColor ? { 
+                            backgroundColor: `${event.event_color}20`,
+                            borderColor: event.event_color,
+                            color: event.event_color
+                          } : {}}
+                          title={`${event.title}${event.is_recurring ? ' (Recurring)' : ''}`}
+                        >
+                          {event.is_recurring && '🔄 '}
+                          {event.title}
+                        </div>
+                      );
+                    })}
                     
                     {pendingEvents.slice(0, 1).map((event) => (
                       <div

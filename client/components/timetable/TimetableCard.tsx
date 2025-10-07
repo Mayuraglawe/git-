@@ -134,7 +134,12 @@ const TimetableCard: React.FC<TimetableCardProps> = ({
                     qualityScore >= 0.9 ? 'bg-green-500' : 
                     qualityScore >= 0.7 ? 'bg-yellow-500' : 'bg-red-500'
                   }`}
-                  style={{ width: `${qualityScore * 100}%` }}
+                  data-width={qualityScore * 100}
+                  ref={(el) => {
+                    if (el) {
+                      el.style.width = `${qualityScore * 100}%`;
+                    }
+                  }}
                 />
               </div>
               <span className={`text-sm font-semibold ${getQualityColor()}`}>

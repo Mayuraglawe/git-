@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Holiday Toggle Controls Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+            border-radius: 16px 16px 0 0;
+        }
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 18px;
+        }
+        .content {
+            padding: 40px;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .section h2 {
+            color: #667eea;
+            font-size: 28px;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .feature-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        .feature-card h3 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 12px;
+        }
+        .feature-card p {
+            color: #666;
+            line-height: 1.6;
+        }
+        .toggle-demo {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border-left: 5px solid #667eea;
+        }
+        .toggle-demo h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+        .toggle-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .toggle-item label {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+        .toggle-item p {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .test-steps {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+        .test-steps h3 {
+            color: #856404;
+            margin-bottom: 15px;
+            font-size: 22px;
+        }
+        .test-steps ol {
+            padding-left: 25px;
+        }
+        .test-steps li {
+            color: #333;
+            margin: 12px 0;
+            line-height: 1.6;
+            font-size: 16px;
+        }
+        .test-steps code {
+            background: rgba(0,0,0,0.1);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        .expected-behavior {
+            background: #d4edda;
+            border: 2px solid #28a745;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+        .expected-behavior h3 {
+            color: #155724;
+            margin-bottom: 15px;
+            font-size: 22px;
+        }
+        .expected-behavior ul {
+            padding-left: 25px;
+        }
+        .expected-behavior li {
+            color: #333;
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+        .screenshot-placeholder {
+            background: #e9ecef;
+            border: 2px dashed #adb5bd;
+            border-radius: 12px;
+            padding: 60px;
+            text-align: center;
+            margin: 20px 0;
+            color: #6c757d;
+        }
+        .screenshot-placeholder h4 {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin: 25px 0;
+            flex-wrap: wrap;
+        }
+        button {
+            flex: 1;
+            min-width: 200px;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .color-legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .color-box {
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .color-box.national {
+            background: #fff3e0;
+            color: #e65100;
+            border: 2px solid #ff9800;
+        }
+        .color-box.religious {
+            background: #f3e5f5;
+            color: #4a148c;
+            border: 2px solid #9c27b0;
+        }
+        .color-box.cultural {
+            background: #e8f5e9;
+            color: #1b5e20;
+            border: 2px solid #4caf50;
+        }
+        .color-box.sunday {
+            background: #ffebee;
+            color: #b71c1c;
+            border: 2px solid #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎚️ Holiday Toggle Controls Test Guide</h1>
+            <p>Complete testing guide for Show Holidays and Google Calendar toggle switches</p>
+        </div>
+
+        <div class="content">
+            <!-- Overview Section -->
+            <div class="section">
+                <h2>📋 Overview</h2>
+                <p style="font-size: 16px; line-height: 1.8; color: #666; margin-bottom: 20px;">
+                    The Events page now includes two toggle switches that control how holidays are displayed in the calendar view.
+                    These controls allow users to customize their calendar experience by showing/hiding holidays and choosing
+                    between local data and Google Calendar integration.
+                </p>
+
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h3>⭐ Show Holidays Toggle</h3>
+                        <p>
+                            Controls visibility of all holidays (including Indian holidays and Sundays) in the calendar grid.
+                            When enabled, holidays appear with colored backgrounds and star icons.
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>📅 Google Calendar Toggle</h3>
+                        <p>
+                            Switches between local Indian holiday data and Google Calendar API integration.
+                            Requires API key configuration. Disabled when "Show Holidays" is off.
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🎨 Color-Coded Holidays</h3>
+                        <p>
+                            Different holiday types have distinct colors: National (Orange), Religious (Purple),
+                            Cultural (Green), and Sundays (Red) for easy identification.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toggle Location Section -->
+            <div class="section">
+                <h2>📍 Where to Find the Toggles</h2>
+                <div class="test-steps">
+                    <h3>🔍 Navigation Steps</h3>
+                    <ol>
+                        <li>Open the application at <code>http://localhost:8081/</code></li>
+                        <li>Navigate to the <strong>Events</strong> page from the sidebar menu</li>
+                        <li>Click on the <strong>Calendar</strong> tab (if in List view)</li>
+                        <li>Look at the header section, next to the Calendar/List toggle</li>
+                        <li>You'll see two switches with labels:
+                            <ul>
+                                <li><strong>Show Holidays</strong> - Controls holiday visibility</li>
+                                <li><strong>Google Calendar</strong> - Controls data source</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+
+                <div class="screenshot-placeholder">
+                    <h4>📸 Expected UI Location</h4>
+                    <p>The toggles appear in the header, between the Calendar/List tabs and the "Create Event" button</p>
+                    <p style="margin-top: 10px; font-size: 14px;">[Header] → [Calendar/List Tabs] → [Show Holidays Switch] → [Google Calendar Switch] → [Create Event Button]</p>
+                </div>
+            </div>
+
+            <!-- Toggle Demo Section -->
+            <div class="section">
+                <h2>🎚️ Toggle Controls Demo</h2>
+                <div class="toggle-demo">
+                    <h3>Interactive Demo (Non-functional)</h3>
+                    <div class="toggle-item">
+                        <div>
+                            <label>Show Holidays</label>
+                            <p>Toggle visibility of Indian holidays and Sundays</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" checked id="demoHolidays">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-item">
+                        <div>
+                            <label>Google Calendar</label>
+                            <p>Use Google Calendar API for holiday data</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="demoGoogle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <p style="margin-top: 15px; color: #666; font-size: 14px;">
+                        ℹ️ <strong>Note:</strong> This is a visual demo only. The actual toggles are in the Events page calendar view.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Test Steps Section -->
+            <div class="section">
+                <h2>✅ Manual Testing Steps</h2>
+                <div class="test-steps">
+                    <h3>1️⃣ Test "Show Holidays" Toggle - ON State</h3>
+                    <ol>
+                        <li>Navigate to Events page → Calendar view</li>
+                        <li>Ensure "Show Holidays" toggle is <strong>ON</strong> (default state)</li>
+                        <li>Observe the calendar grid for October 2025</li>
+                        <li>Verify you see:
+                            <ul>
+                                <li>⭐ Star icons on holiday dates (Oct 2, 3, 20, 24, 27)</li>
+                                <li>🌟 Red background on all Sundays (5th, 12th, 19th, 26th)</li>
+                                <li>🎉 Colored backgrounds on national/religious/cultural holidays</li>
+                                <li>Holiday names when clicking on dates</li>
+                            </ul>
+                        </li>
+                        <li>Check the calendar header shows "Indian holidays & Sundays included"</li>
+                    </ol>
+                </div>
+
+                <div class="test-steps">
+                    <h3>2️⃣ Test "Show Holidays" Toggle - OFF State</h3>
+                    <ol>
+                        <li>Click the "Show Holidays" toggle to turn it <strong>OFF</strong></li>
+                        <li>Observe the calendar grid immediately</li>
+                        <li>Verify:
+                            <ul>
+                                <li>❌ No star icons on any dates</li>
+                                <li>❌ No red backgrounds on Sundays</li>
+                                <li>❌ No colored backgrounds on holiday dates</li>
+                                <li>❌ Holiday information doesn't appear in date details</li>
+                                <li>✅ Only events are visible (if any)</li>
+                            </ul>
+                        </li>
+                        <li>Notice the "Google Calendar" toggle becomes <strong>disabled</strong></li>
+                    </ol>
+                </div>
+
+                <div class="test-steps">
+                    <h3>3️⃣ Test "Google Calendar" Toggle</h3>
+                    <ol>
+                        <li>Turn "Show Holidays" toggle <strong>ON</strong> first</li>
+                        <li>Click "Google Calendar" toggle to turn it <strong>ON</strong></li>
+                        <li>Observe the behavior:
+                            <ul>
+                                <li>⏳ Calendar may show loading indicator briefly</li>
+                                <li>If API key is configured: External holiday data fetches</li>
+                                <li>If no API key: Falls back to local Indian holidays data</li>
+                                <li>Check calendar header for "Google Calendar" indicator</li>
+                            </ul>
+                        </li>
+                        <li>Turn toggle <strong>OFF</strong> to revert to local data only</li>
+                        <li>Verify holidays still display (from local data)</li>
+                    </ol>
+                </div>
+
+                <div class="test-steps">
+                    <h3>4️⃣ Test Toggle Interaction</h3>
+                    <ol>
+                        <li>Verify "Google Calendar" toggle is disabled when "Show Holidays" is OFF</li>
+                        <li>Turn "Show Holidays" ON → "Google Calendar" toggle becomes enabled</li>
+                        <li>Test rapid toggling doesn't cause errors</li>
+                        <li>Check browser console for any error messages</li>
+                        <li>Switch to List view → Toggles should disappear</li>
+                        <li>Switch back to Calendar view → Toggles reappear</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Expected Behavior Section -->
+            <div class="section">
+                <h2>✨ Expected Behavior</h2>
+                <div class="expected-behavior">
+                    <h3>✅ When Show Holidays is ON</h3>
+                    <ul>
+                        <li><strong>Calendar Grid:</strong> Holidays visible with colored backgrounds</li>
+                        <li><strong>Date Headers:</strong> Star icons (⭐) appear on holiday dates</li>
+                        <li><strong>Sundays:</strong> Red background (bg-red-50 border-red-200)</li>
+                        <li><strong>National Holidays:</strong> Orange background (bg-orange-50 border-orange-200)</li>
+                        <li><strong>Selected Date Panel:</strong> Shows holiday information first, then events</li>
+                        <li><strong>Header Text:</strong> "Indian holidays & Sundays included" message visible</li>
+                        <li><strong>Loading State:</strong> "(loading...)" appears briefly when fetching holidays</li>
+                    </ul>
+                </div>
+
+                <div class="expected-behavior">
+                    <h3>✅ When Show Holidays is OFF</h3>
+                    <ul>
+                        <li><strong>Calendar Grid:</strong> No holiday indicators or backgrounds</li>
+                        <li><strong>Date Headers:</strong> No star icons</li>
+                        <li><strong>Selected Date Panel:</strong> Only events shown, no holiday information</li>
+                        <li><strong>Google Calendar Toggle:</strong> Disabled and grayed out</li>
+                        <li><strong>Performance:</strong> No holiday data loading, faster rendering</li>
+                    </ul>
+                </div>
+
+                <div class="expected-behavior">
+                    <h3>✅ When Google Calendar is ON</h3>
+                    <ul>
+                        <li><strong>Data Source:</strong> Attempts to fetch from Google Calendar API</li>
+                        <li><strong>API Key Check:</strong> Uses VITE_GOOGLE_CALENDAR_API_KEY env variable</li>
+                        <li><strong>Fallback:</strong> If API fails or no key, uses local Indian holidays</li>
+                        <li><strong>Header Indicator:</strong> Shows "• Google Calendar" in header text</li>
+                        <li><strong>Combined Data:</strong> Merges Google data with local holidays (local priority)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Color Legend Section -->
+            <div class="section">
+                <h2>🎨 Holiday Color Legend</h2>
+                <p style="font-size: 16px; color: #666; margin-bottom: 20px;">
+                    Different holiday types are color-coded for easy identification in the calendar:
+                </p>
+                <div class="color-legend">
+                    <div class="color-box national">
+                        <div style="font-size: 24px; margin-bottom: 8px;">🇮🇳</div>
+                        <div>National Holiday</div>
+                        <div style="font-size: 12px; margin-top: 5px; opacity: 0.8;">Orange Background</div>
+                    </div>
+                    <div class="color-box religious">
+                        <div style="font-size: 24px; margin-bottom: 8px;">🕉️</div>
+                        <div>Religious Holiday</div>
+                        <div style="font-size: 12px; margin-top: 5px; opacity: 0.8;">Purple Background</div>
+                    </div>
+                    <div class="color-box cultural">
+                        <div style="font-size: 24px; margin-bottom: 8px;">🎭</div>
+                        <div>Cultural Holiday</div>
+                        <div style="font-size: 12px; margin-top: 5px; opacity: 0.8;">Green Background</div>
+                    </div>
+                    <div class="color-box sunday">
+                        <div style="font-size: 24px; margin-bottom: 8px;">🏖️</div>
+                        <div>Sunday</div>
+                        <div style="font-size: 12px; margin-top: 5px; opacity: 0.8;">Red Background</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Implementation Details Section -->
+            <div class="section">
+                <h2>🔧 Implementation Details</h2>
+                <div class="toggle-demo">
+                    <h3>Code Implementation</h3>
+                    <div style="background: white; padding: 20px; border-radius: 8px; margin: 15px 0;">
+                        <h4 style="color: #333; margin-bottom: 10px;">Events.tsx - Toggle Controls</h4>
+                        <pre style="background: #f5f5f5; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.6;">
+<code>// State variables
+const [showHolidays, setShowHolidays] = useState(true);
+const [useGoogleCalendar, setUseGoogleCalendar] = useState(false);
+
+// Toggle controls (only visible in calendar view)
+{activeView === 'calendar' && (
+  &lt;div className="flex items-center gap-3 border-l pl-4"&gt;
+    &lt;Switch
+      id="show-holidays"
+      checked={showHolidays}
+      onCheckedChange={setShowHolidays}
+    /&gt;
+    &lt;Label htmlFor="show-holidays"&gt;Show Holidays&lt;/Label&gt;
+    
+    &lt;Switch
+      id="google-calendar"
+      checked={useGoogleCalendar}
+      onCheckedChange={setUseGoogleCalendar}
+      disabled={!showHolidays}
+    /&gt;
+    &lt;Label htmlFor="google-calendar"&gt;Google Calendar&lt;/Label&gt;
+  &lt;/div&gt;
+)}
+
+// Pass props to EventCalendar
+&lt;EventCalendar
+  events={calendarEvents}
+  onEventClick={handleEventClick}
+  onDateClick={handleDateClick}
+  onCreateEvent={handleCreateEvent}
+  showHolidays={showHolidays}
+  useGoogleCalendar={useGoogleCalendar}
+/&gt;</code>
+                        </pre>
+                    </div>
+
+                    <div style="background: white; padding: 20px; border-radius: 8px; margin: 15px 0;">
+                        <h4 style="color: #333; margin-bottom: 10px;">EventCalendar.tsx - Holiday Loading</h4>
+                        <pre style="background: #f5f5f5; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.6;">
+<code>// Load holidays when showHolidays or useGoogleCalendar changes
+useEffect(() => {
+  if (!showHolidays) return;
+
+  const loadHolidays = async () => {
+    setIsLoadingHolidays(true);
+    try {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      
+      if (useGoogleCalendar) {
+        const holidayData = await holidayService.getCombinedHolidays(year, month);
+        setHolidays(holidayData);
+      } else {
+        const holidayData = holidayService.getHolidaysForMonth(year, month);
+        setHolidays(holidayData);
+      }
+    } catch (error) {
+      console.error('Error loading holidays:', error);
+      // Fallback to local holidays
+      const fallbackHolidays = holidayService.getHolidaysForMonth(year, month);
+      setHolidays(fallbackHolidays);
+    } finally {
+      setIsLoadingHolidays(false);
+    }
+  };
+
+  loadHolidays();
+}, [currentDate, showHolidays, useGoogleCalendar]);</code>
+                        </pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions Section -->
+            <div class="section">
+                <h2>🚀 Quick Actions</h2>
+                <div class="button-group">
+                    <button onclick="window.open('http://localhost:8081/events', '_blank')">
+                        📅 Open Events Page
+                    </button>
+                    <button onclick="window.open('http://localhost:8081/', '_blank')">
+                        🌐 Open Application
+                    </button>
+                    <button onclick="alert('1. Open Events page\n2. Switch to Calendar view\n3. Look for toggle switches in header\n4. Test Show Holidays ON/OFF\n5. Test Google Calendar ON/OFF\n6. Verify color changes in calendar')">
+                        📝 Show Quick Test Steps
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Demo toggle interaction
+        document.getElementById('demoHolidays').addEventListener('change', function() {
+            const googleToggle = document.getElementById('demoGoogle');
+            if (!this.checked) {
+                googleToggle.checked = false;
+                googleToggle.disabled = true;
+                googleToggle.parentElement.style.opacity = '0.5';
+            } else {
+                googleToggle.disabled = false;
+                googleToggle.parentElement.style.opacity = '1';
+            }
+        });
+    </script>
+</body>
+</html>
